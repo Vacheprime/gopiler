@@ -29,63 +29,65 @@ func ManualMatches() bool {
 }
 
 type State struct {
-	Transition func(rune, *State) *State
+	Position    int
+	NextStates  map[string]*State
+	IsAccepting bool
 }
 
 type DFA struct {
-	Regex      string
 	FirstState State
 }
 
-func (dfa *DFA) Matches() bool {
-	dfa.buildStates()
-	chars := []rune(SEARCH_STR)
-	currentState := &dfa.FirstState
-	for i := 0; i < len(chars); i++ {
-		currentState = currentState.Transition(chars[i], &dfa.FirstState)
-		if currentState == nil {
-			return true
-		}
-	}
-	return false
+func NewDFA(regex string) *DFA {
+	regexChars := []rune(regex)
+	return &DFA{FirstState: *createState(regexChars, 0)}
 }
 
-func (dfa *DFA) buildStates() {
-	// Start with last state and go backwards
-	// State 4
-	state4Trans := func(char rune, firstState *State) *State {
-		if char == 'x' {
-			return nil
-		}
-		return firstState
+func createState(regex []rune, idx int) *State {
+	// Determine next possible states based on current index.
+	if idx == len(regex)-1 {
+		return &State{Position: idx, NextStates: nil, IsAccepting: true}
 	}
-	state4 := State{Transition: state4Trans}
-	// State 3
-	state3 := State{Transition: func(char rune, firstState *State) *State {
-		if char >= 48 && char <= 57 {
-			return &state4
+	nextChar := regex[idx]
+
+	switch nextChar {
+	case '[':
+		return nil
+	default:
+		idx++
+		var nextState *State
+		if idx >= len(regex) {
+			nextState = nil
+		} else {
+			nextState = createState(regex, idx)
 		}
-		return firstState
-	}}
-	// State 2
-	state2 := State{Transition: func(r rune, s *State) *State {
-		if r == 'c' {
-			return &state3
-		}
-		return s
-	}}
-	// State 1
-	state1 := State{Transition: func(r rune, s *State) *State {
-		if r == 'b' {
-			return &state2
-		}
-		return s
-	}}
-	state0trans := func(r rune, s *State) *State {
-		if r == 'a' {
-			return &state1
-		}
-		return s
+		return &State{Position: idx, NextStates: map[string]*State{string(nextChar): createState(regex, idx+1)}}
 	}
-	dfa.FirstState = State{Transition: state0trans}
+}
+
+func (dfa *DFA) Matches(search string) *string {
+	chars := []rune(search)
+	// currentState := &dfa.FirstState
+	// startIndex := 0
+	// for i := 0; i < len(chars); i++ {
+	// 	currentState = currentState.Transition(chars[i], &dfa.FirstState)
+	// 	if currentState == nil {
+	// 		substr := string(chars[startIndex : i+1])
+	// 		return &substr
+	// 	}
+	// 	if currentState.Position == 0 {
+	// 		startIndex = i
+	// 	}
+	// }
+	// return nil
+	startIndex := 0
+	currentState := dfa.FirstState
+	for i := 0; i < len(chars); i++ {
+		possibleNext, ok := currentState.NextStates[string(chars[i])]
+		if !ok {
+			currentState = dfa.FirstState
+			startIndex = 0
+		}
+		currentState = *possibleNext
+	}
 }
