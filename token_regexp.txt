@@ -1,0 +1,11 @@
+# Reserved keywords
+if
+else
+int
+
+# Token Regexps
+letter = [a-zA-Z]
+digit = [0-9]
+letter_or_digit = {letter}|{digit}
+underscore_tail = _{letter_or_digit}+
+Identifier = {letter}{underscore_tail}*

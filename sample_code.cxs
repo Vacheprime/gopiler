@@ -1,0 +1,11 @@
+int test = 5;
+int long_test = test + 5;
+int result;
+
+if (test > long_test) {
+    result = test + long_test;
+} else {
+    result = 0;
+}
+
+print(result);

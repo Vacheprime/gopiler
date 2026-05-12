@@ -15,6 +15,11 @@ func main() {
 	// // Generate code
 	// code := gopiler.GenerateCode(expr)
 	// gopiler.InterpretCode(code)
-	dfa := lexer.NewDFA("regex")
-	fmt.Println(*dfa.Matches("regex"))
+	dfa := lexer.NewDFA("regeax")
+	match := dfa.Matches("reeaxaa")
+	if match != nil {
+		fmt.Println(*match)
+	} else {
+		fmt.Println("No results!")
+	}
 }

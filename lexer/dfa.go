@@ -30,7 +30,7 @@ func ManualMatches() bool {
 
 type State struct {
 	Position    int
-	NextStates  map[string]*State
+	NextStates  map[rune]*State
 	IsAccepting bool
 }
 
@@ -61,7 +61,7 @@ func createState(regex []rune, idx int) *State {
 		} else {
 			nextState = createState(regex, idx)
 		}
-		return &State{Position: idx, NextStates: map[string]*State{string(nextChar): createState(regex, idx+1)}}
+		return &State{Position: idx, NextStates: map[rune]*State{nextChar: nextState}}
 	}
 }
 
@@ -83,11 +83,19 @@ func (dfa *DFA) Matches(search string) *string {
 	startIndex := 0
 	currentState := dfa.FirstState
 	for i := 0; i < len(chars); i++ {
-		possibleNext, ok := currentState.NextStates[string(chars[i])]
-		if !ok {
+		possibleNext, ok := currentState.NextStates[chars[i]]
+		if !ok && !currentState.IsAccepting {
 			currentState = dfa.FirstState
 			startIndex = 0
+		} else if !ok && currentState.IsAccepting {
+			substr := string(chars[startIndex : i+1])
+			return &substr
+		} else {
+			currentState = *possibleNext
 		}
-		currentState = *possibleNext
+		if currentState.Position == 0 {
+			startIndex = i
+		}
 	}
+	return nil
 }
