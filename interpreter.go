@@ -7,33 +7,10 @@ import (
 	"strings"
 )
 
-type Stack struct {
-	numbers []int64
-}
-
-func NewStack() Stack {
-	return Stack{numbers: make([]int64, 0)}
-}
-
-func (s *Stack) Push(x int64) {
-	s.numbers = append(s.numbers, x)
-}
-
-func (s *Stack) Pop() int64 {
-	// Ignore
-	if len(s.numbers) == 0 {
-		return -1 // Indicate error, demo purposes
-	}
-	n := len(s.numbers)
-	value := s.numbers[n-1]
-	s.numbers = s.numbers[:n-1]
-	return value
-}
-
 func InterpretCode(code string) {
 	reader := strings.NewReader(code)
 	scanner := bufio.NewScanner(reader)
-	stack := NewStack()
+	stack := NewStack[int64]()
 	for {
 		// Advance to next line
 		if !scanner.Scan() {
@@ -55,8 +32,16 @@ func InterpretCode(code string) {
 			continue
 		}
 
-		num1 := stack.Pop()
-		num2 := stack.Pop()
+		num1, err := stack.Pop()
+		if err == ErrEmptyStack {
+			fmt.Println("Unexpected end of stack.")
+			break
+		}
+		num2, err := stack.Pop()
+		if err == ErrEmptyStack {
+			fmt.Println("Unexpected end of stack.")
+			break
+		}
 		// Check if MULT or ADD
 		switch line {
 		case "MULT":
