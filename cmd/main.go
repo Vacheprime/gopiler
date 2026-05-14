@@ -28,19 +28,9 @@ func main() {
 	// } else {
 	// 	fmt.Println("No results!")
 	// }
-	stack, err := lexer.RegexToPostfix("a(a|b)*b")
+	postfix, err := lexer.RegexToPostfix("aabb")
 	if err != nil {
-		fmt.Println(err)
+		panic(err)
 	}
-	chars := make([]rune, 0)
-	for {
-		top, err := stack.Pop()
-		if err != nil {
-			break
-		}
-		chars = append(chars, top)
-	}
-	for i := len(chars) - 1; i >= 0; i-- {
-		fmt.Print(string(chars[i]))
-	}
+	fmt.Println(string(*postfix))
 }

@@ -11,6 +11,67 @@ var (
 )
 
 /*
+NFA as array of arrays?
+[
+
+	0 (State): [{1, 2}, {3}, {2}] // Input needs to be converted into index. Node metadata not available
+	1 (State): [...]
+
+]
+
+NFA as array of maps?
+[
+
+	0 (State): map[]{}
+
+]
+
+NFA as connected Nodes?
+*/
+type NFANode struct {
+	isAccepting bool
+	position    int
+	transitions map[rune]*[]NFANode
+	matchChar   rune
+}
+
+func PostfixToNFA(postfixChars []rune) {
+	stack := gopiler.NewStack[*NFANode]()
+	nodeCount := 0
+	for i := range postfixChars {
+		c := postfixChars[i]
+
+		// Push C if is a char to match
+		if isRegexChar(c) {
+			newNode := NFANode{position: nodeCount, isAccepting: false, transitions: make(map[rune]*[]NFANode), matchChar: c}
+			stack.Push(&newNode)
+			nodeCount++
+		}
+
+		// Handle concat
+		if c == '&' {
+			// Pop 2 previous nodes
+			prev2, _ := stack.Pop()
+			prev1, _ := stack.Pop()
+			// Connect together via transition
+			prev1.transitions[prev2.matchChar] = prev2
+			// Push back prev2
+			stack.Push(prev2)
+		}
+
+		// Handle Union
+		if c == '|' {
+			// Pop 2 previous
+			prev2, _ := stack.Pop()
+			prev1, _ := stack.Pop()
+			// Create start
+			startNode := NFANode{position: -1, isAccepting: false, transitions: make(map[rune]*[]NFANode)}
+			//startNode.transitions[''] =
+		}
+	}
+}
+
+/*
 Convert a simple regex into postfix notation using
 a variation of the shunting-yard algorithm.
 
@@ -23,9 +84,9 @@ Alternation | - Fourth
 Since concatenation is implicit, the special character &
 will be used to explicitely show this operation.
 */
-func RegexToPostfix(regex string) (*gopiler.Stack[rune], error) {
+func RegexToPostfix(regex string) (*[]rune, error) {
 	chars := prepareRegexString(regex)
-	outputQueue := gopiler.NewStack[rune]()
+	outputQueue := make([]rune, len(chars))
 	operatorStack := gopiler.NewStack[rune]()
 
 	for i := range chars {
@@ -42,7 +103,7 @@ func RegexToPostfix(regex string) (*gopiler.Stack[rune], error) {
 				if topOp == '(' {
 					break
 				}
-				outputQueue.Push(topOp)
+				outputQueue = append(outputQueue, topOp)
 			}
 		case '*', '+', '?':
 			for {
@@ -53,7 +114,7 @@ func RegexToPostfix(regex string) (*gopiler.Stack[rune], error) {
 				}
 				if topOp == '*' || topOp == '+' || topOp == '?' {
 					operatorStack.Pop()
-					outputQueue.Push(topOp)
+					outputQueue = append(outputQueue, topOp)
 					continue
 				}
 				operatorStack.Push(currentChar)
@@ -68,7 +129,7 @@ func RegexToPostfix(regex string) (*gopiler.Stack[rune], error) {
 				}
 				if topOp == '*' || topOp == '+' || topOp == '?' || topOp == '&' {
 					operatorStack.Pop()
-					outputQueue.Push(topOp)
+					outputQueue = append(outputQueue, topOp)
 					continue
 				}
 				operatorStack.Push(currentChar)
@@ -82,14 +143,14 @@ func RegexToPostfix(regex string) (*gopiler.Stack[rune], error) {
 				}
 				if topOp == '*' || topOp == '+' || topOp == '?' || topOp == '&' || topOp == '|' {
 					operatorStack.Pop()
-					outputQueue.Push(topOp)
+					outputQueue = append(outputQueue, topOp)
 					continue
 				}
 				operatorStack.Push(currentChar)
 				break
 			}
 		default:
-			outputQueue.Push(currentChar)
+			outputQueue = append(outputQueue, currentChar)
 		}
 	}
 	for {
@@ -100,7 +161,7 @@ func RegexToPostfix(regex string) (*gopiler.Stack[rune], error) {
 		if topOp == '(' {
 			return nil, ErrUnmatchedParenthesis
 		}
-		outputQueue.Push(topOp)
+		outputQueue = append(outputQueue, topOp)
 	}
 	return &outputQueue, nil
 }
