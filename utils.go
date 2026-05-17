@@ -2,8 +2,6 @@ package gopiler
 
 import (
 	"errors"
-	"maps"
-	"slices"
 )
 
 var (
@@ -73,6 +71,6 @@ func (s *Set[T]) Contains(item T) bool {
 	return ok
 }
 
-func (s *Set[T]) Items() []T {
-	return slices.Collect(maps.Keys(s.items))
+func (s *Set[T]) Items() map[T]struct{} {
+	return s.items
 }

@@ -22,31 +22,13 @@ func findMatch(node *NFANode, accept *NFANode, chars []rune, epsilonNodes *gopil
 	if len(chars) > 0 {
 		c := chars[0]
 		if nextNodes, ok := node.transitions[c]; ok {
-			items := nextNodes.Items()
 			epsilonNodes.Clear()
 			runeCount++
-			for j := range items {
-				nbrChars, ok := findMatch(items[j], accept, chars[1:], epsilonNodes)
-				if ok {
-					matches = true
-					if nbrChars > biggestMatch {
-						biggestMatch = nbrChars
-					}
+			for j := range nextNodes.Items() {
+				nbrChars, ok := findMatch(j, accept, chars[1:], epsilonNodes)
+				if !ok {
+					continue
 				}
-			}
-		}
-	}
-
-	if node.epsilonTransitions.Len() > 0 {
-		items := node.epsilonTransitions.Items()
-		for j := range items {
-			next := items[j]
-			if next == node || epsilonNodes.Contains(next) {
-				continue
-			}
-			epsilonNodes.Add(next)
-			nbrChars, ok := findMatch(items[j], accept, chars, epsilonNodes)
-			if ok {
 				matches = true
 				if nbrChars > biggestMatch {
 					biggestMatch = nbrChars
@@ -54,9 +36,24 @@ func findMatch(node *NFANode, accept *NFANode, chars []rune, epsilonNodes *gopil
 			}
 		}
 	}
-	runeCount += biggestMatch
-	if !matches && node == accept {
-		return runeCount, true
+
+	if node.epsilonTransitions.Len() > 0 {
+		for next := range node.epsilonTransitions.Items() {
+			if next == node || epsilonNodes.Contains(next) {
+				continue
+			}
+			epsilonNodes.Add(next)
+			nbrChars, ok := findMatch(next, accept, chars, epsilonNodes)
+			if !ok {
+				continue
+			}
+			matches = true
+			if nbrChars > biggestMatch {
+				biggestMatch = nbrChars
+			}
+		}
 	}
-	return runeCount, matches
+
+	runeCount += biggestMatch
+	return runeCount, matches || node == accept
 }
