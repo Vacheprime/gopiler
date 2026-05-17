@@ -1,6 +1,10 @@
 package gopiler
 
-import "errors"
+import (
+	"errors"
+	"maps"
+	"slices"
+)
 
 var (
 	ErrEmptyStack = errors.New("empty stack")
@@ -36,4 +40,39 @@ func (s *Stack[T]) Pop() (T, error) {
 	value := s.items[n-1]
 	s.items = s.items[:n-1]
 	return value, nil
+}
+
+type Set[T comparable] struct {
+	items map[T]struct{}
+}
+
+func NewSet[T comparable]() Set[T] {
+	return Set[T]{make(map[T]struct{})}
+}
+
+func (s *Set[T]) Add(items ...T) {
+	for i := range items {
+		s.items[items[i]] = struct{}{}
+	}
+}
+
+func (s *Set[T]) Remove(item T) {
+	delete(s.items, item)
+}
+
+func (s *Set[T]) Len() int {
+	return len(s.items)
+}
+
+func (s *Set[T]) Clear() {
+	clear(s.items)
+}
+
+func (s *Set[T]) Contains(item T) bool {
+	_, ok := s.items[item]
+	return ok
+}
+
+func (s *Set[T]) Items() []T {
+	return slices.Collect(maps.Keys(s.items))
 }
