@@ -22,6 +22,7 @@ func findMatch(node *NFANode, accept *NFANode, chars []rune, epsilonNodes *gopil
 	if len(chars) > 0 {
 		c := chars[0]
 		if nextNodes, ok := node.transitions[c]; ok {
+			// Clear upon char consumption
 			epsilonNodes.Clear()
 			runeCount++
 			for j := range nextNodes.Items() {
@@ -53,7 +54,10 @@ func findMatch(node *NFANode, accept *NFANode, chars []rune, epsilonNodes *gopil
 			}
 		}
 	}
-
+	// Also clear upon dead-end
+	if !matches {
+		epsilonNodes.Clear()
+	}
 	runeCount += biggestMatch
 	return runeCount, matches || node == accept
 }

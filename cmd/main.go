@@ -7,14 +7,13 @@ import (
 )
 
 func main() {
-	postfix, err := lexer.RegexToPostfix("a+b")
+	post, err := lexer.RegexToPostfix("(a*)*")
 	if err != nil {
 		panic(err)
 	}
-	post := []rune{'a', '?', 'b'}
-	nfa, err := lexer.PostfixToNFA(post)
-	fmt.Println(string(*postfix))
-	match, ok := lexer.Match(nfa, "ab")
+	nfa, err := lexer.PostfixToNFA(*post)
+	fmt.Println(string(*post))
+	match, ok := lexer.Match(nfa, "abe")
 	if ok {
 		fmt.Println(match)
 	} else {
