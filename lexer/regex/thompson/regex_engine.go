@@ -1,4 +1,4 @@
-package lexer
+package thompson
 
 import "github.com/Vacheprime/gopiler"
 
