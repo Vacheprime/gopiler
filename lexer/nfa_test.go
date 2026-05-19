@@ -1,7 +1,6 @@
 package lexer
 
 import (
-	"slices"
 	"testing"
 )
 
@@ -19,13 +18,18 @@ func TestExplicitConcatenation(t *testing.T) {
 		{"(a|b) should be (a|b)", "(a|b)", "(a|b)"},
 		{"(a+b)|a* should be (a+&b)|a*", "(a+b)|a*", "(a+&b)|a*"},
 		{"(ab|(cd|e))*e?f* should be (a&b|(c&d|e))*&e?&f*", "(ab|(cd|e))*e?f*", "(a&b|(c&d|e))*&e?&f*"},
+		{"[a-zA-Z][a] should be [a-zA-Z]&[a]", "[a-zA-Z][a]", "[a-zA-Z]&[a]"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := prepareRegexString(tt.input)
-			ex := []rune(tt.want)
-			if !slices.Equal(res, ex) {
-				t.Errorf("got %s, want %s", string(res), tt.want)
+			tks, err := tokenizeRegex(tt.input)
+			if err != nil {
+				t.Errorf("got error on tokenization %s", err)
+			}
+			res := prepareRegexString(tks)
+			stringified := tokensToString(res)
+			if stringified != tt.want {
+				t.Errorf("got %s, want %s", stringified, tt.want)
 			}
 		})
 	}

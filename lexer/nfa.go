@@ -12,6 +12,11 @@ var (
 	ErrInvalidCharClass     = errors.New("invalid character class")
 )
 
+const (
+	VALID_KEY   = -1
+	INVALID_KEY = -2
+)
+
 type DeriveTransitionKey func(c rune) int32
 
 type CharacterRange struct {
@@ -27,7 +32,7 @@ func DirectDerivator() DeriveTransitionKey {
 
 func AnyDerivator() DeriveTransitionKey {
 	return func(c rune) int32 {
-		return -1
+		return VALID_KEY
 	}
 }
 
@@ -37,17 +42,43 @@ func GroupDerivator(acceptedRanges []CharacterRange, acceptedSingulars []rune) D
 		for i := range acceptedRanges {
 			charRange := acceptedRanges[i]
 			if c >= charRange.start && c <= charRange.end {
-				return -1 // Correct transition key
+				return VALID_KEY
 			}
 		}
 		// Check match in acceptedSingulars
 		for i := range acceptedSingulars {
 			if acceptedSingulars[i] == c {
-				return -1
+				return VALID_KEY
 			}
 		}
-		return -2 // No transitions
+		return INVALID_KEY // No transitions
 	}
+}
+
+func createGroupDerivator(t RegexToken) (DeriveTransitionKey, error) {
+	acceptedRanges := []CharacterRange{}
+	acceptedSingulars := []rune{}
+	for i := 1; i < len(t.repr)-1; i++ {
+		curr := t.repr[i]
+		next := t.repr[i+1]
+		if next == '-' {
+			// Check for end of range
+			if i+2 >= len(t.repr) {
+				return nil, ErrInvalidCharClass
+			}
+			// Process the end of range
+			end := t.repr[i+2]
+			if end < curr {
+				return nil, ErrInvalidCharClass
+			}
+			// Append range
+			acceptedRanges = append(acceptedRanges, CharacterRange{curr, end})
+			i += 2 // Skip 2 to land after char range
+			continue
+		}
+		acceptedSingulars = append(acceptedSingulars, curr)
+	}
+	return GroupDerivator(acceptedRanges, acceptedSingulars), nil
 }
 
 type NFANode struct {
@@ -60,18 +91,25 @@ func NewNode(d DeriveTransitionKey) NFANode {
 	return NFANode{make(map[rune]gopiler.Set[*NFANode]), gopiler.NewSet[*NFANode](), d}
 }
 
-func (node *NFANode) AddTransition(c rune, n *NFANode) {
-	if node.derivator == nil {
-		return
-	}
-	key := node.derivator(c)
-	s, ok := node.transitions[key]
+func (node *NFANode) AddDirectTransition(c rune, n *NFANode) {
+	s, ok := node.transitions[c]
 	if ok {
 		s.Add(n)
 	} else {
 		transitionSet := gopiler.NewSet[*NFANode]()
 		transitionSet.Add(n)
-		node.transitions[key] = transitionSet
+		node.transitions[c] = transitionSet
+	}
+}
+
+func (node *NFANode) AddGroupedTransition(n *NFANode) {
+	s, ok := node.transitions[VALID_KEY]
+	if ok {
+		s.Add(n)
+	} else {
+		transitionSet := gopiler.NewSet[*NFANode]()
+		transitionSet.Add(n)
+		node.transitions[VALID_KEY] = transitionSet
 	}
 }
 
@@ -85,12 +123,20 @@ type NFA struct {
 	acceptStates []*NFANode
 }
 
-func createSimpleNFA(c rune, d DeriveTransitionKey) *NFA {
-	s := NewNode(d)
+func createSingleCharNFA(c rune) *NFA {
+	s := NewNode(DirectDerivator())
 	e := NewNode(nil)
 	// Add transition
-	s.AddTransition(c, &e)
+	s.AddDirectTransition(c, &e)
 	// Build NFA
+	return &NFA{&s, &e, []*NFANode{&e}}
+}
+
+func createGroupedNFA(d DeriveTransitionKey) *NFA {
+	s := NewNode(d)
+	e := NewNode(nil)
+	// Add grouped transition
+	s.AddGroupedTransition(&e)
 	return &NFA{&s, &e, []*NFANode{&e}}
 }
 
@@ -142,18 +188,27 @@ func alternateNFAs(n1 *NFA, n2 *NFA) *NFA {
 	return &NFA{&s, &e, []*NFANode{&e}}
 }
 
-func PostfixToNFA(postfixChars []rune) (*NFA, error) {
+func PostfixToNFA(postfixTokens []RegexToken) (*NFA, error) {
 	nfaFrags := gopiler.NewStack[*NFA]()
-	for i := range postfixChars {
-		c := postfixChars[i]
+	for i := range postfixTokens {
+		t := postfixTokens[i]
 
 		// Simple State
-		if isRegexChar(c) {
-			nfaFrags.Push(createCharNFA(c))
+		if t.class == SINGLE_CHAR {
+			nfaFrags.Push(createSingleCharNFA(t.repr[0]))
 			continue
 		}
 
-		switch c {
+		// Char class
+		if t.class == CHAR_CLASS {
+			d, err := createGroupDerivator(t)
+			if err != nil {
+				return nil, err
+			}
+			nfaFrags.Push(createGroupedNFA(d))
+		}
+
+		switch t.repr[0] {
 		// Concat
 		case '&':
 			n2, _ := nfaFrags.Pop()
@@ -189,12 +244,21 @@ const (
 	CHAR_CLASS
 	QUANTIFIER
 	OPERATOR
-	PARENTHESIS
+	LEFT_PARENTHESIS
+	RIGHT_PARENTHESIS
 )
 
 type RegexToken struct {
 	class RegexTokenType
 	repr  []rune
+}
+
+func tokensToString(tks []RegexToken) string {
+	f := []rune{}
+	for i := range tks {
+		f = append(f, tks[i].repr...)
+	}
+	return string(f)
 }
 
 /*
@@ -211,60 +275,64 @@ Quantifiers *,+,? - Directly appended to output since they are unary operators
 Since concatenation is implicit, the special character &
 will be used to explicitely show this operation.
 */
-func RegexToPostfix(regex string) (*[]rune, error) {
-	chars := prepareRegexString(regex)
-	outputQueue := make([]rune, 0)
-	operatorStack := gopiler.NewStack[rune]()
+func RegexToPostfix(regex string) ([]RegexToken, error) {
+	tokens, err := tokenizeRegex(regex)
+	if err != nil {
+		return nil, err
+	}
+	tokens = prepareRegexString(tokens)
+	outputQueue := make([]RegexToken, 0)
+	operatorStack := gopiler.NewStack[RegexToken]()
 
-	for i := range chars {
-		currentChar := chars[i]
-		switch currentChar {
-		case '(':
-			operatorStack.Push(currentChar)
-		case ')':
+	for i := range tokens {
+		currToken := tokens[i]
+		switch {
+		case currToken.class == LEFT_PARENTHESIS:
+			operatorStack.Push(currToken)
+		case currToken.class == RIGHT_PARENTHESIS:
 			for {
 				topOp, err := operatorStack.Pop()
 				if err != nil {
 					return nil, ErrUnmatchedParenthesis
 				}
-				if topOp == '(' {
+				if topOp.class == LEFT_PARENTHESIS {
 					break
 				}
 				outputQueue = append(outputQueue, topOp)
 			}
-		case '*', '+', '?':
-			outputQueue = append(outputQueue, currentChar)
-		case '&':
+		case currToken.class == QUANTIFIER:
+			outputQueue = append(outputQueue, currToken)
+		case currToken.class == OPERATOR && currToken.repr[0] == '&':
 			for {
 				topOp, err := operatorStack.Peak()
 				if err != nil {
-					operatorStack.Push(currentChar)
+					operatorStack.Push(currToken)
 					break
 				}
-				if topOp == '*' || topOp == '+' || topOp == '?' || topOp == '&' {
+				if topOp.class == QUANTIFIER || topOp.repr[0] == '&' {
 					operatorStack.Pop()
 					outputQueue = append(outputQueue, topOp)
 					continue
 				}
-				operatorStack.Push(currentChar)
+				operatorStack.Push(currToken)
 				break
 			}
-		case '|':
+		case currToken.class == OPERATOR && currToken.repr[0] == '|':
 			for {
 				topOp, err := operatorStack.Peak()
 				if err != nil {
 					break
 				}
-				if topOp == '*' || topOp == '+' || topOp == '?' || topOp == '&' || topOp == '|' {
+				if topOp.class == QUANTIFIER || topOp.class == OPERATOR {
 					operatorStack.Pop()
 					outputQueue = append(outputQueue, topOp)
 					continue
 				}
-				operatorStack.Push(currentChar)
+				operatorStack.Push(currToken)
 				break
 			}
 		default:
-			outputQueue = append(outputQueue, currentChar)
+			outputQueue = append(outputQueue, currToken)
 		}
 	}
 	// Append the rest of the operators
@@ -273,52 +341,57 @@ func RegexToPostfix(regex string) (*[]rune, error) {
 		if err != nil {
 			break
 		}
-		if topOp == '(' {
+		if topOp.class == LEFT_PARENTHESIS {
 			return nil, ErrUnmatchedParenthesis
 		}
 		outputQueue = append(outputQueue, topOp)
 	}
-	return &outputQueue, nil
+	return outputQueue, nil
 }
 
 /*
 Prepares a regex for postfix conversion by adding
 '&' to denote concatenation.
 */
-func prepareRegexString(regex string) []rune {
-	chars := []rune(regex)
-	preparedChars := make([]rune, 0)
-	for i := 0; i < len(chars)-1; i++ {
-		curr := chars[i]
-		next := chars[i+1]
-		if (isRegexChar(next) || next == '(') && (curr == ')' || isRegexChar(curr) || isQuantifier(curr)) {
-			preparedChars = append(preparedChars, curr, '&')
+func prepareRegexString(tokens []RegexToken) []RegexToken {
+	preparedTokens := make([]RegexToken, 0)
+	for i := 0; i < len(tokens)-1; i++ {
+		curr := tokens[i]
+		next := tokens[i+1]
+
+		if (next.class == SINGLE_CHAR || next.class == CHAR_CLASS || next.class == LEFT_PARENTHESIS) &&
+			(curr.class == RIGHT_PARENTHESIS || curr.class == SINGLE_CHAR || curr.class == CHAR_CLASS || curr.class == QUANTIFIER) {
+			preparedTokens = append(preparedTokens, curr, RegexToken{OPERATOR, []rune{'&'}})
 		} else {
-			preparedChars = append(preparedChars, curr)
+			preparedTokens = append(preparedTokens, curr)
 		}
 	}
-	preparedChars = append(preparedChars, chars[len(chars)-1])
-	return preparedChars
+	preparedTokens = append(preparedTokens, tokens[len(tokens)-1])
+	return preparedTokens
 }
 
 func tokenizeRegex(regex string) ([]RegexToken, error) {
 	chars := []rune(regex)
 	tokens := make([]RegexToken, 0)
-	for i := range chars {
+	for i := 0; i < len(chars); i++ {
 		c := chars[i]
 		switch {
-		case isParenthesis(c):
-			tokens = append(tokens, RegexToken{PARENTHESIS, []rune{c}})
+		case c == '(':
+			tokens = append(tokens, RegexToken{LEFT_PARENTHESIS, []rune{c}})
+		case c == ')':
+			tokens = append(tokens, RegexToken{RIGHT_PARENTHESIS, []rune{c}})
 		case isQuantifier(c):
 			tokens = append(tokens, RegexToken{QUANTIFIER, []rune{c}})
 		case isOp(c):
 			tokens = append(tokens, RegexToken{OPERATOR, []rune{c}})
 		case c == '[':
-			tk, err := tokenizeCharClass(i, &chars)
+			tk, charsRead, err := tokenizeCharClass(i, &chars)
 			if err != nil {
 				return nil, err
 			}
 			tokens = append(tokens, *tk)
+			// Skip charsRead
+			i += charsRead
 		default:
 			tokens = append(tokens, RegexToken{SINGLE_CHAR, []rune{c}})
 		}
@@ -326,24 +399,27 @@ func tokenizeRegex(regex string) ([]RegexToken, error) {
 	return tokens, nil
 }
 
-func tokenizeCharClass(i int, chars *[]rune) (*RegexToken, error) {
+func tokenizeCharClass(i int, chars *[]rune) (*RegexToken, int, error) {
 	c := (*chars)[i]
 	repr := []rune{c}
 	skipNext := false
+	charsRead := 0
 	// Read all runes in char class
-	for j := range (*chars)[i:] {
+	nextChars := (*chars)[i+1:]
+	for j := range nextChars {
+		charsRead++
 		if skipNext {
 			skipNext = !skipNext
 			continue
 		}
-		r := (*chars)[j]
+		r := nextChars[j]
 		// Handle escape
 		if r == '\\' {
 			// No next char
-			if j == len(*chars)-1 {
-				return nil, ErrInvalidCharClass
+			if j == len(nextChars)-1 {
+				return nil, -1, ErrInvalidCharClass
 			}
-			next := (*chars)[j+1]
+			next := nextChars[j+1]
 			repr = append(repr, next)
 			skipNext = true
 		}
@@ -353,9 +429,12 @@ func tokenizeCharClass(i int, chars *[]rune) (*RegexToken, error) {
 		}
 	}
 	if repr[len(repr)-1] != ']' {
-		return nil, ErrUnmatchedBracket
+		return nil, -1, ErrUnmatchedBracket
 	}
-	return &RegexToken{CHAR_CLASS, repr}, nil
+	if len(repr) == 2 {
+		return nil, -1, ErrInvalidCharClass
+	}
+	return &RegexToken{CHAR_CLASS, repr}, charsRead, nil
 }
 
 func isOp(r rune) bool {
