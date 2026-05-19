@@ -17,6 +17,7 @@ type RegexTokenType int
 const (
 	SINGLE_CHAR RegexTokenType = iota
 	CHAR_CLASS
+	ANY_CHAR // Not yet implemented.
 	QUANTIFIER
 	OPERATOR
 	LEFT_PARENTHESIS
@@ -218,8 +219,4 @@ func isOp(r rune) bool {
 
 func isQuantifier(r rune) bool {
 	return r == '*' || r == '+' || r == '?'
-}
-
-func isParenthesis(r rune) bool {
-	return r == '(' || r == ')'
 }

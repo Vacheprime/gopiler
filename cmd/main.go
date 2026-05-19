@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	post, err := re.RegexToPostfix("([+][(][0-9]+[)])? [0-9][0-9][0-9] [0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]")
+	post, err := re.RegexToPostfix("{.}")
 	if err != nil {
 		panic(err)
 	}
@@ -17,7 +17,7 @@ func main() {
 		panic(err)
 	}
 
-	match, ok := th.Match(nfa, "+(135) 514 872-8373")
+	match, ok := th.Match(nfa, "{.}")
 	if ok {
 		fmt.Println(match)
 	} else {
