@@ -8,69 +8,70 @@ import (
 
 var (
 	ErrUnmatchedParenthesis = errors.New("right parenthesis unmatched.")
+	ErrUnmatchedBracket     = errors.New("left bracket of character class unmatched.")
+	ErrInvalidCharClass     = errors.New("invalid character class")
 )
+
+type DeriveTransitionKey func(c rune) int32
 
 type CharacterRange struct {
 	start rune
 	end   rune
 }
 
-type KeyDerivator interface {
-	DeriveTransitionKey(c rune) int32
-}
-
-type DirectDerivator struct{}
-
-func (dd *DirectDerivator) DeriveTransitionKey(c rune) int32 {
-	return c
-}
-
-type GroupDerivator struct {
-	acceptedRanges    []CharacterRange
-	acceptedSingulars []rune
-}
-
-func (gd *GroupDerivator) DeriveTransitionKey(c rune) int32 {
-	// Check match in acceptedRanges
-	for i := range gd.acceptedRanges {
-		charRange := gd.acceptedRanges[i]
-		if c >= charRange.start && c <= charRange.end {
-			return -1 // Correct transition key
-		}
+func DirectDerivator() DeriveTransitionKey {
+	return func(c rune) int32 {
+		return c
 	}
-	// Check match in acceptedSingulars
-	for i := range gd.acceptedSingulars {
-		if gd.acceptedSingulars[i] == c {
-			return -1
-		}
-	}
-	return -2 // No transitions
 }
 
-type AnyDerivator struct{}
+func AnyDerivator() DeriveTransitionKey {
+	return func(c rune) int32 {
+		return -1
+	}
+}
 
-func (ad *AnyDerivator) DeriveTransitionKey(c rune) int32 {
-	return -1 // Accepts any
+func GroupDerivator(acceptedRanges []CharacterRange, acceptedSingulars []rune) DeriveTransitionKey {
+	return func(c rune) int32 {
+		// Check match in acceptedRanges
+		for i := range acceptedRanges {
+			charRange := acceptedRanges[i]
+			if c >= charRange.start && c <= charRange.end {
+				return -1 // Correct transition key
+			}
+		}
+		// Check match in acceptedSingulars
+		for i := range acceptedSingulars {
+			if acceptedSingulars[i] == c {
+				return -1
+			}
+		}
+		return -2 // No transitions
+	}
 }
 
 type NFANode struct {
 	transitions        map[rune]gopiler.Set[*NFANode]
 	epsilonTransitions gopiler.Set[*NFANode]
-	derivator          KeyDerivator
+	derivator          DeriveTransitionKey
 }
 
-func NewNode(d KeyDerivator) NFANode {
+func NewNode(d DeriveTransitionKey) NFANode {
 	return NFANode{make(map[rune]gopiler.Set[*NFANode]), gopiler.NewSet[*NFANode](), d}
 }
 
 func (node *NFANode) AddTransition(c rune, n *NFANode) {
-	s, ok := node.transitions[c]
+	if node.derivator == nil {
+		return
+	}
+	key := node.derivator(c)
+	s, ok := node.transitions[key]
 	if ok {
 		s.Add(n)
 	} else {
 		transitionSet := gopiler.NewSet[*NFANode]()
 		transitionSet.Add(n)
-		node.transitions[c] = transitionSet
+		node.transitions[key] = transitionSet
 	}
 }
 
@@ -84,9 +85,9 @@ type NFA struct {
 	acceptStates []*NFANode
 }
 
-func createCharNFA(c rune) *NFA {
-	s := NewNode()
-	e := NewNode()
+func createSimpleNFA(c rune, d DeriveTransitionKey) *NFA {
+	s := NewNode(d)
+	e := NewNode(nil)
 	// Add transition
 	s.AddTransition(c, &e)
 	// Build NFA
@@ -100,8 +101,8 @@ func concatNFAs(n1 *NFA, n2 *NFA) *NFA {
 }
 
 func quantify0orMore(n *NFA) *NFA {
-	s := NewNode()
-	e := NewNode()
+	s := NewNode(nil)
+	e := NewNode(nil)
 	// Add start transitions
 	s.AddEpsilonTransition(&e)
 	s.AddEpsilonTransition(n.startNode)
@@ -113,8 +114,8 @@ func quantify0orMore(n *NFA) *NFA {
 }
 
 func quantify1OrMore(n *NFA) *NFA {
-	s := NewNode()
-	e := NewNode()
+	s := NewNode(nil)
+	e := NewNode(nil)
 	// Add start transition
 	s.AddEpsilonTransition(n.startNode)
 	// Add loop transition
@@ -130,8 +131,8 @@ func quantify0or1(n *NFA) *NFA {
 }
 
 func alternateNFAs(n1 *NFA, n2 *NFA) *NFA {
-	s := NewNode()
-	e := NewNode()
+	s := NewNode(nil)
+	e := NewNode(nil)
 	// Add start epsilon transitions
 	s.AddEpsilonTransition(n1.startNode)
 	s.AddEpsilonTransition(n2.startNode)
@@ -179,6 +180,21 @@ func PostfixToNFA(postfixChars []rune) (*NFA, error) {
 	}
 	final, _ := nfaFrags.Pop()
 	return final, nil
+}
+
+type RegexTokenType int
+
+const (
+	SINGLE_CHAR RegexTokenType = iota
+	CHAR_CLASS
+	QUANTIFIER
+	OPERATOR
+	PARENTHESIS
+)
+
+type RegexToken struct {
+	class RegexTokenType
+	repr  []rune
 }
 
 /*
@@ -285,8 +301,65 @@ func prepareRegexString(regex string) []rune {
 	return preparedChars
 }
 
+func tokenizeRegex(regex string) ([]RegexToken, error) {
+	chars := []rune(regex)
+	tokens := make([]RegexToken, 0)
+	for i := range chars {
+		c := chars[i]
+		switch {
+		case isParenthesis(c):
+			tokens = append(tokens, RegexToken{PARENTHESIS, []rune{c}})
+		case isQuantifier(c):
+			tokens = append(tokens, RegexToken{QUANTIFIER, []rune{c}})
+		case isOp(c):
+			tokens = append(tokens, RegexToken{OPERATOR, []rune{c}})
+		case c == '[':
+			tk, err := tokenizeCharClass(i, &chars)
+			if err != nil {
+				return nil, err
+			}
+			tokens = append(tokens, *tk)
+		default:
+			tokens = append(tokens, RegexToken{SINGLE_CHAR, []rune{c}})
+		}
+	}
+	return tokens, nil
+}
+
+func tokenizeCharClass(i int, chars *[]rune) (*RegexToken, error) {
+	c := (*chars)[i]
+	repr := []rune{c}
+	skipNext := false
+	// Read all runes in char class
+	for j := range (*chars)[i:] {
+		if skipNext {
+			skipNext = !skipNext
+			continue
+		}
+		r := (*chars)[j]
+		// Handle escape
+		if r == '\\' {
+			// No next char
+			if j == len(*chars)-1 {
+				return nil, ErrInvalidCharClass
+			}
+			next := (*chars)[j+1]
+			repr = append(repr, next)
+			skipNext = true
+		}
+		repr = append(repr, r)
+		if r == ']' {
+			break
+		}
+	}
+	if repr[len(repr)-1] != ']' {
+		return nil, ErrUnmatchedBracket
+	}
+	return &RegexToken{CHAR_CLASS, repr}, nil
+}
+
 func isOp(r rune) bool {
-	return isQuantifier(r) || r == '|' || r == '&'
+	return r == '|' || r == '&'
 }
 
 func isQuantifier(r rune) bool {
@@ -294,7 +367,7 @@ func isQuantifier(r rune) bool {
 }
 
 func isRegexChar(r rune) bool {
-	return !isOp(r) && !isParenthesis(r)
+	return !isOp(r) && !isQuantifier(r) && !isParenthesis(r)
 }
 
 func isParenthesis(r rune) bool {
