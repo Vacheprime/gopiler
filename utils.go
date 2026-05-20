@@ -24,8 +24,8 @@ func (s *Stack[T]) Peak() (T, error) {
 	return s.items[len(s.items)-1], nil
 }
 
-func (s *Stack[T]) Push(x T) {
-	s.items = append(s.items, x)
+func (s *Stack[T]) Push(items ...T) {
+	s.items = append(s.items, items...)
 }
 
 func (s *Stack[T]) Pop() (T, error) {
