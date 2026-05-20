@@ -3,16 +3,20 @@ package regex
 import (
 	"errors"
 
-	"github.com/Vacheprime/gopiler"
+	gp "github.com/Vacheprime/gopiler"
 )
 
 var (
 	ErrUnmatchedParenthesis = errors.New("right parenthesis unmatched.")
 	ErrUnmatchedBracket     = errors.New("left bracket of character class unmatched.")
 	ErrInvalidCharClass     = errors.New("invalid character class")
+	ErrMissingOperands      = errors.New("missing operand(s) in expression")
+	ErrUnknownToken         = errors.New("unknown token encountered while building AST")
+	ErrMalformedRegex       = errors.New("regex is malformed and could not be parsed")
 )
 
 type RegexTokenType int
+type ExpressionType int
 
 const (
 	SINGLE_CHAR RegexTokenType = iota
@@ -22,6 +26,12 @@ const (
 	OPERATOR
 	LEFT_PARENTHESIS
 	RIGHT_PARENTHESIS
+)
+
+const (
+	BINARY_EXPR ExpressionType = iota
+	UNARY_EXPR
+	ATOMIC
 )
 
 type RegexToken struct {
@@ -35,6 +45,53 @@ func tokensToString(tks []RegexToken) string {
 		f = append(f, tks[i].Repr...)
 	}
 	return string(f)
+}
+
+type Expression struct {
+	Type     ExpressionType
+	Operator rune
+	LExpr    *Expression
+	RExpr    *Expression
+	Atom     RegexToken
+}
+
+func RegexToParseTree(regex string) (*Expression, error) {
+	// Get tokens as postfix
+	tks, err := RegexToPostfix(regex)
+	if err != nil {
+		return nil, err
+	}
+	exprStack := gp.NewStack[*Expression]()
+	for i := range tks {
+		tk := tks[i]
+		switch tk.Class {
+		case SINGLE_CHAR, ANY_CHAR, CHAR_CLASS:
+			e := Expression{ATOMIC, 0, nil, nil, tk}
+			exprStack.Push(&e)
+		case OPERATOR:
+			if exprStack.Len() < 2 {
+				return nil, ErrMissingOperands
+			}
+			e2, _ := exprStack.Pop()
+			e1, _ := exprStack.Pop()
+			e3 := Expression{BINARY_EXPR, tk.Repr[0], e1, e2, RegexToken{}}
+			exprStack.Push(&e3)
+		case QUANTIFIER:
+			if exprStack.Len() == 0 {
+				return nil, ErrMissingOperands
+			}
+			e1, _ := exprStack.Pop()
+			e2 := Expression{UNARY_EXPR, tk.Repr[0], e1, nil, RegexToken{}}
+			exprStack.Push(&e2)
+		default:
+			return nil, ErrUnknownToken
+		}
+	}
+	if exprStack.Len() != 1 {
+		return nil, ErrMalformedRegex
+	}
+	e, _ := exprStack.Pop()
+	return e, nil
 }
 
 /*
@@ -58,7 +115,7 @@ func RegexToPostfix(regex string) ([]RegexToken, error) {
 	}
 	tokens = prepareRegexString(tokens)
 	outputQueue := make([]RegexToken, 0)
-	operatorStack := gopiler.NewStack[RegexToken]()
+	operatorStack := gp.NewStack[RegexToken]()
 
 	for i := range tokens {
 		currToken := tokens[i]
@@ -97,6 +154,7 @@ func RegexToPostfix(regex string) ([]RegexToken, error) {
 			for {
 				topOp, err := operatorStack.Peak()
 				if err != nil {
+					operatorStack.Push(currToken)
 					break
 				}
 				if topOp.Class == QUANTIFIER || topOp.Class == OPERATOR {
