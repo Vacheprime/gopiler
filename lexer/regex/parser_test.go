@@ -19,6 +19,7 @@ func TestExplicitConcatenation(t *testing.T) {
 		{"(a+b)|a* should be (a+&b)|a*", "(a+b)|a*", "(a+&b)|a*"},
 		{"(ab|(cd|e))*e?f* should be (a&b|(c&d|e))*&e?&f*", "(ab|(cd|e))*e?f*", "(a&b|(c&d|e))*&e?&f*"},
 		{"[a-zA-Z][a] should be [a-zA-Z]&[a]", "[a-zA-Z][a]", "[a-zA-Z]&[a]"},
+		{"[abc]*|ag should be [abc]*|a&g", "[abc]*|ag", "[abc]*|a&g"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
