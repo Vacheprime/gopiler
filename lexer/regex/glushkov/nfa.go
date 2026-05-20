@@ -134,14 +134,45 @@ func determineFinalSymbols(reRootExpr *re.Expression, alphabet Alphabet) gp.Set[
 	return symbols
 }
 
-func determineSymbolPairs(reRootExpr *re.Expression, alphabet Alphabet) gp.Set[Symbol] {
-	symPairs := gp.NewSet[SymbolPair]()
-	exprStack := gp.NewStack[*re.Expression]()
-	exprStack.Push(reRootExpr)
-	for exprStack.Len() > 0 {
-		e, _ := exprStack.Pop()
-		switch e.Type {
+// type frame struct {
+// 	Expr    *re.Expression
+// 	Visited bool
+// }
 
-		}
-	}
-}
+// func determineSymbolPairs(reRootExpr *re.Expression, alphabet Alphabet) gp.Set[Symbol] {
+// 	symPairs := gp.NewSet[SymbolPair]()
+// 	frameStack := gp.NewStack[frame]()
+// 	firstFrame := frame{reRootExpr, false}
+// 	frameStack.Push(firstFrame)
+// 	possiblePairs := []Symbol{}
+// 	for frameStack.Len() > 0 {
+// 		f, _ := frameStack.Pop()
+
+// 		// Stop Condition
+// 		if f.Expr.Type == re.ATOMIC {
+// 			// Lookup symbol in occurences
+// 			s, _ := alphabet[f.Expr.Atom]
+// 			// Add to possiblePairs
+// 			possiblePairs = append(possiblePairs, s)
+// 		}
+
+// 		if f.Visited {
+// 			// Unwind
+// 			// Build possible pairs based on type
+
+// 		} else {
+// 			// Push current
+// 			frameStack.Push(frame{f.Expr, true})
+
+// 			// Push next based on type
+// 			switch f.Expr.Type {
+// 			case re.UNARY_EXPR:
+// 				frameStack.Push(frame{f.Expr.LExpr, false})
+// 			case re.BINARY_EXPR:
+// 				frameStack.Push(frame{f.Expr.RExpr, false}, frame{f.Expr.LExpr, false})
+// 			}
+// 		}
+// 	}
+// }
+
+func determineSymbolPairs()
