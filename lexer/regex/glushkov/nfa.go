@@ -7,7 +7,7 @@ import (
 
 type Symbol struct {
 	SymbolId int
-	Repr     *[]rune
+	Token    *re.RegexToken
 }
 
 type SymbolPair struct {
@@ -19,6 +19,12 @@ type SymbolInformation struct {
 	StartSymbols gp.Set[Symbol]
 	FinalSymbols gp.Set[Symbol]
 	SymbolPairs  gp.Set[SymbolPair]
+}
+
+func addSymbolToAlphabet(tk *re.RegexToken, alphabet map[*re.RegexToken]Symbol) Symbol {
+	s := Symbol{len(alphabet), tk}
+	alphabet[tk] = s
+	return s
 }
 
 func NewSymbolInformation() SymbolInformation {
@@ -42,8 +48,8 @@ func BuildSymbolInformation(postfixTokens []re.RegexToken) SymbolInformation {
 	return info
 }
 
-func determineStartSymbols(reRootExpr *re.Expression) []Symbol {
-	symbols := []Symbol{}
+func determineStartSymbols(reRootExpr *re.Expression, alphabet map[*re.RegexToken]Symbol) gp.Set[Symbol] {
+	symbols := gp.NewSet[Symbol]()
 	exprStack := gp.NewStack[*re.Expression]()
 	exprStack.Push(reRootExpr)
 	for exprStack.Len() > 0 {
@@ -64,8 +70,42 @@ func determineStartSymbols(reRootExpr *re.Expression) []Symbol {
 		case re.UNARY_EXPR:
 			exprStack.Push(e.LExpr)
 		case re.ATOMIC:
-			s := Symbol{len(symbols), &e.Atom.Repr}
-			symbols = append(symbols, s)
+			s, ok := alphabet[e.Atom]
+			if !ok {
+				s = addSymbolToAlphabet(e.Atom, alphabet)
+			}
+			symbols.Add(s)
+		}
+	}
+	return symbols
+}
+
+func determineFinalSymbols(reRootExpr *re.Expression, alphabet map[*re.RegexToken]Symbol) gp.Set[Symbol] {
+	symbols := gp.NewSet[Symbol]()
+	exprStack := gp.NewStack[*re.Expression]()
+	exprStack.Push(reRootExpr)
+	for exprStack.Len() > 0 {
+		e, _ := exprStack.Pop()
+		switch e.Type {
+		case re.BINARY_EXPR:
+			switch e.Operator {
+			case '|':
+				exprStack.Push(e.LExpr, e.RExpr)
+			case '&':
+				right := e.RExpr
+				if right.Type == re.UNARY_EXPR && (right.Operator == '*' || right.Operator == '?') {
+					exprStack.Push(e.LExpr)
+				}
+				exprStack.Push(right)
+			}
+		case re.UNARY_EXPR:
+			exprStack.Push(e.LExpr)
+		case re.ATOMIC:
+			s, ok := alphabet[e.Atom]
+			if !ok {
+				s = addSymbolToAlphabet(e.Atom, alphabet)
+			}
+			symbols.Add(s)
 		}
 	}
 	return symbols

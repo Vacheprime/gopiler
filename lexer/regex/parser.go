@@ -52,7 +52,7 @@ type Expression struct {
 	Operator rune
 	LExpr    *Expression
 	RExpr    *Expression
-	Atom     RegexToken
+	Atom     *RegexToken
 }
 
 func RegexToParseTree(regex string) (*Expression, error) {
@@ -66,7 +66,7 @@ func RegexToParseTree(regex string) (*Expression, error) {
 		tk := tks[i]
 		switch tk.Class {
 		case SINGLE_CHAR, ANY_CHAR, CHAR_CLASS:
-			e := Expression{ATOMIC, 0, nil, nil, tk}
+			e := Expression{ATOMIC, 0, nil, nil, &tk}
 			exprStack.Push(&e)
 		case OPERATOR:
 			if exprStack.Len() < 2 {
@@ -74,14 +74,14 @@ func RegexToParseTree(regex string) (*Expression, error) {
 			}
 			e2, _ := exprStack.Pop()
 			e1, _ := exprStack.Pop()
-			e3 := Expression{BINARY_EXPR, tk.Repr[0], e1, e2, RegexToken{}}
+			e3 := Expression{BINARY_EXPR, tk.Repr[0], e1, e2, nil}
 			exprStack.Push(&e3)
 		case QUANTIFIER:
 			if exprStack.Len() == 0 {
 				return nil, ErrMissingOperands
 			}
 			e1, _ := exprStack.Pop()
-			e2 := Expression{UNARY_EXPR, tk.Repr[0], e1, nil, RegexToken{}}
+			e2 := Expression{UNARY_EXPR, tk.Repr[0], e1, nil, nil}
 			exprStack.Push(&e2)
 		default:
 			return nil, ErrUnknownToken

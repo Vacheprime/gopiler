@@ -45,11 +45,13 @@ func (s *Stack[T]) Len() int {
 }
 
 type Set[T comparable] struct {
-	items map[T]struct{}
+	items []T
 }
 
-func NewSet[T comparable]() Set[T] {
-	return Set[T]{make(map[T]struct{})}
+func NewSet[T comparable](items ...T) Set[T] {
+	s := Set[T]{make(map[T]struct{})}
+	s.Add(items...)
+	return s
 }
 
 func (s *Set[T]) Add(items ...T) {
@@ -77,4 +79,14 @@ func (s *Set[T]) Contains(item T) bool {
 
 func (s *Set[T]) Items() map[T]struct{} {
 	return s.items
+}
+
+func (s *Set[T]) Intersects(s2 Set[T]) Set[T] {
+	s3 := NewSet[T]()
+	for key := range s.items {
+		if s2.Contains(key) {
+			s3.Add(key)
+		}
+	}
+	return s3
 }
