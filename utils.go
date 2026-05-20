@@ -40,6 +40,10 @@ func (s *Stack[T]) Pop() (T, error) {
 	return value, nil
 }
 
+func (s *Stack[T]) Len() int {
+	return len(s.items)
+}
+
 type Set[T comparable] struct {
 	items map[T]struct{}
 }
