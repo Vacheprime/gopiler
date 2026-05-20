@@ -2,6 +2,7 @@ package gopiler
 
 import (
 	"errors"
+	"slices"
 )
 
 var (
@@ -49,19 +50,27 @@ type Set[T comparable] struct {
 }
 
 func NewSet[T comparable](items ...T) Set[T] {
-	s := Set[T]{make(map[T]struct{})}
+	s := Set[T]{make([]T, 0, len(items)*2)}
 	s.Add(items...)
 	return s
 }
 
 func (s *Set[T]) Add(items ...T) {
 	for i := range items {
-		s.items[items[i]] = struct{}{}
+		c := items[i]
+		if !s.Contains(c) {
+			s.items = append(s.items, c)
+		}
 	}
 }
 
 func (s *Set[T]) Remove(item T) {
-	delete(s.items, item)
+	for i, v := range s.items {
+		if v == item {
+			s.items = append(s.items[:i], s.items[i+1:]...)
+			break
+		}
+	}
 }
 
 func (s *Set[T]) Len() int {
@@ -73,20 +82,9 @@ func (s *Set[T]) Clear() {
 }
 
 func (s *Set[T]) Contains(item T) bool {
-	_, ok := s.items[item]
-	return ok
+	return slices.Contains(s.items, item)
 }
 
-func (s *Set[T]) Items() map[T]struct{} {
+func (s *Set[T]) Items() []T {
 	return s.items
-}
-
-func (s *Set[T]) Intersects(s2 Set[T]) Set[T] {
-	s3 := NewSet[T]()
-	for key := range s.items {
-		if s2.Contains(key) {
-			s3.Add(key)
-		}
-	}
-	return s3
 }

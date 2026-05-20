@@ -10,8 +10,8 @@ import (
 
 func symbolsToString(symbols gp.Set[Symbol]) string {
 	var b strings.Builder
-	for k := range symbols.Items() {
-		b.WriteString(string(*k.Repr))
+	for _, v := range symbols.Items() {
+		b.WriteString(string(v.Token.Repr))
 	}
 	return b.String()
 }
@@ -34,7 +34,8 @@ func TestDetermineStartSymbols(t *testing.T) {
 			if err != nil {
 				t.Errorf("got error while creating parse tree %s", err)
 			}
-			symbols := determineStartSymbols(expr)
+			alphabet := make(map[*re.RegexToken]Symbol)
+			symbols := determineStartSymbols(expr, alphabet)
 			res := symbolsToString(symbols)
 			if res != tt.want {
 				t.Errorf("got %s, want %s", res, tt.want)
@@ -47,13 +48,13 @@ func TestDetermineFinalSymbols(t *testing.T) {
 	var tests = []struct {
 		name  string
 		input string
-		want  gp.Set[Symbol]
+		want  string
 	}{
-		{"abc should be c", "abc", "a"},
-		{"a|b should be ab", "a|b", "ba"},
-		{"a*b should be ab", "a*b", "b"},
+		{"abc should be c", "abc", "c"},
+		{"a|b should be ba", "a|b", "ba"},
+		{"a*b should be b", "a*b", "b"},
 		{"(a|b)*c should be c", "(a|b)*c", "c"},
-		{"(a(ab)*)*|(ba*) should be ab", "(a(ab)*)*|(ba*)", "aba"},
+		{"(a(ab)*)*|(ba)* should be ab", "(a(ab)*)*|(ba)*", "aba"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -61,7 +62,8 @@ func TestDetermineFinalSymbols(t *testing.T) {
 			if err != nil {
 				t.Errorf("got error while creating parse tree %s", err)
 			}
-			symbols := determineFinalSymbols(expr)
+			alphabet := make(map[*re.RegexToken]Symbol)
+			symbols := determineFinalSymbols(expr, alphabet)
 			res := symbolsToString(symbols)
 			if res != tt.want {
 				t.Errorf("got %s, want %s", res, tt.want)
