@@ -5,6 +5,8 @@ import (
 	re "github.com/Vacheprime/gopiler/lexer/regex"
 )
 
+type Alphabet map[*re.RegexToken]Symbol
+
 type Symbol struct {
 	SymbolId int
 	Token    *re.RegexToken
@@ -21,7 +23,7 @@ type SymbolInformation struct {
 	SymbolPairs  gp.Set[SymbolPair]
 }
 
-func addSymbolToAlphabet(tk *re.RegexToken, alphabet map[*re.RegexToken]Symbol) Symbol {
+func addSymbolToAlphabet(tk *re.RegexToken, alphabet Alphabet) Symbol {
 	s := Symbol{len(alphabet), tk}
 	alphabet[tk] = s
 	return s
@@ -48,7 +50,28 @@ func BuildSymbolInformation(postfixTokens []re.RegexToken) SymbolInformation {
 	return info
 }
 
-func determineStartSymbols(reRootExpr *re.Expression, alphabet map[*re.RegexToken]Symbol) gp.Set[Symbol] {
+func determineAlphabet(reRootExpr *re.Expression) Alphabet {
+	alphabet := make(map[*re.RegexToken]Symbol)
+	exprStack := gp.NewStack[*re.Expression]()
+	exprStack.Push(reRootExpr)
+	for exprStack.Len() > 0 {
+		e, _ := exprStack.Pop()
+		switch e.Type {
+		case re.BINARY_EXPR:
+			exprStack.Push(e.RExpr, e.LExpr)
+		case re.UNARY_EXPR:
+			exprStack.Push(e.LExpr)
+		case re.ATOMIC:
+			_, ok := alphabet[e.Atom]
+			if !ok {
+				addSymbolToAlphabet(e.Atom, alphabet)
+			}
+		}
+	}
+	return alphabet
+}
+
+func determineStartSymbols(reRootExpr *re.Expression, alphabet Alphabet) gp.Set[Symbol] {
 	symbols := gp.NewSet[Symbol]()
 	exprStack := gp.NewStack[*re.Expression]()
 	exprStack.Push(reRootExpr)
@@ -80,7 +103,7 @@ func determineStartSymbols(reRootExpr *re.Expression, alphabet map[*re.RegexToke
 	return symbols
 }
 
-func determineFinalSymbols(reRootExpr *re.Expression, alphabet map[*re.RegexToken]Symbol) gp.Set[Symbol] {
+func determineFinalSymbols(reRootExpr *re.Expression, alphabet Alphabet) gp.Set[Symbol] {
 	symbols := gp.NewSet[Symbol]()
 	exprStack := gp.NewStack[*re.Expression]()
 	exprStack.Push(reRootExpr)
@@ -109,4 +132,16 @@ func determineFinalSymbols(reRootExpr *re.Expression, alphabet map[*re.RegexToke
 		}
 	}
 	return symbols
+}
+
+func determineSymbolPairs(reRootExpr *re.Expression, alphabet Alphabet) gp.Set[Symbol] {
+	symPairs := gp.NewSet[SymbolPair]()
+	exprStack := gp.NewStack[*re.Expression]()
+	exprStack.Push(reRootExpr)
+	for exprStack.Len() > 0 {
+		e, _ := exprStack.Pop()
+		switch e.Type {
+
+		}
+	}
 }

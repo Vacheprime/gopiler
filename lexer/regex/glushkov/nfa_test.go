@@ -71,3 +71,31 @@ func TestDetermineFinalSymbols(t *testing.T) {
 		})
 	}
 }
+
+func TestDetermineAlphabet(t *testing.T) {
+	var tests = []struct {
+		name  string
+		input string
+		want  int
+	}{
+		{"abc should be 3", "abc", 3},
+		{"a|b should be 2", "a|b", 2},
+		{"a*b should be 2", "a*b", 2},
+		{"(a|b)*c should be 3", "(a|b)*c", 3},
+		{"(a(ab)*)*|(ba)* should be 5", "(a(ab)*)*|(ba)*", 5},
+		{"[a-z] should be 1", "[a-z]", 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expr, err := re.RegexToParseTree(tt.input)
+			if err != nil {
+				t.Errorf("got error while creating parse tree %s", err)
+			}
+			alphabet := determineAlphabet(expr)
+			res := len(alphabet)
+			if res != tt.want {
+				t.Errorf("got %d, want %d", res, tt.want)
+			}
+		})
+	}
+}
