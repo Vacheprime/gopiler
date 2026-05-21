@@ -1,11 +1,16 @@
 package glushkov
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/Vacheprime/gopiler"
 	gp "github.com/Vacheprime/gopiler"
 	re "github.com/Vacheprime/gopiler/lexer/regex"
 )
 
-type Alphabet map[*re.RegexToken]Symbol
+type SymbolOccurences map[*re.RegexToken]Symbol
 
 type Symbol struct {
 	SymbolId int
@@ -23,9 +28,9 @@ type SymbolInformation struct {
 	SymbolPairs  gp.Set[SymbolPair]
 }
 
-func addSymbolToAlphabet(tk *re.RegexToken, alphabet Alphabet) Symbol {
-	s := Symbol{len(alphabet), tk}
-	alphabet[tk] = s
+func AddSymbolToOccurences(tk *re.RegexToken, occurences SymbolOccurences) Symbol {
+	s := Symbol{len(occurences) + 1, tk}
+	occurences[tk] = s
 	return s
 }
 
@@ -33,25 +38,17 @@ func NewSymbolInformation() SymbolInformation {
 	return SymbolInformation{gp.NewSet[Symbol](), gp.NewSet[Symbol](), gp.NewSet[SymbolPair]()}
 }
 
-func BuildSymbolInformation(postfixTokens []re.RegexToken) SymbolInformation {
-	info := NewSymbolInformation()
-	stack := gp.NewStack[re.RegexToken]()
-	for i := range postfixTokens {
-		tk := postfixTokens[i]
-
-		switch tk.Class {
-		case re.ANY_CHAR, re.SINGLE_CHAR, re.CHAR_CLASS:
-			// Add to start symbols if first
-			if stack.Len() == 0 {
-
-			}
-		}
-	}
-	return info
+func BuildSymbolInformation(reRootExpr *re.Expression) SymbolInformation {
+	occurences := DetermineSymbolOccurences(reRootExpr)
+	startSymbols := DetermineStartSymbols(reRootExpr, occurences)
+	finalSymbols := DetermineFinalSymbols(reRootExpr, occurences)
+	symbolPairs := gp.NewSet[SymbolPair]()
+	DetermineSymbolPairs(&symbolPairs, reRootExpr, occurences)
+	return SymbolInformation{startSymbols, finalSymbols, symbolPairs}
 }
 
-func determineAlphabet(reRootExpr *re.Expression) Alphabet {
-	alphabet := make(map[*re.RegexToken]Symbol)
+func DetermineSymbolOccurences(reRootExpr *re.Expression) SymbolOccurences {
+	occurences := make(map[*re.RegexToken]Symbol)
 	exprStack := gp.NewStack[*re.Expression]()
 	exprStack.Push(reRootExpr)
 	for exprStack.Len() > 0 {
@@ -62,16 +59,16 @@ func determineAlphabet(reRootExpr *re.Expression) Alphabet {
 		case re.UNARY_EXPR:
 			exprStack.Push(e.LExpr)
 		case re.ATOMIC:
-			_, ok := alphabet[e.Atom]
+			_, ok := occurences[e.Atom]
 			if !ok {
-				addSymbolToAlphabet(e.Atom, alphabet)
+				AddSymbolToOccurences(e.Atom, occurences)
 			}
 		}
 	}
-	return alphabet
+	return occurences
 }
 
-func determineStartSymbols(reRootExpr *re.Expression, alphabet Alphabet) gp.Set[Symbol] {
+func DetermineStartSymbols(reRootExpr *re.Expression, occurences SymbolOccurences) gp.Set[Symbol] {
 	symbols := gp.NewSet[Symbol]()
 	exprStack := gp.NewStack[*re.Expression]()
 	exprStack.Push(reRootExpr)
@@ -93,17 +90,14 @@ func determineStartSymbols(reRootExpr *re.Expression, alphabet Alphabet) gp.Set[
 		case re.UNARY_EXPR:
 			exprStack.Push(e.LExpr)
 		case re.ATOMIC:
-			s, ok := alphabet[e.Atom]
-			if !ok {
-				s = addSymbolToAlphabet(e.Atom, alphabet)
-			}
+			s, _ := occurences[e.Atom]
 			symbols.Add(s)
 		}
 	}
 	return symbols
 }
 
-func determineFinalSymbols(reRootExpr *re.Expression, alphabet Alphabet) gp.Set[Symbol] {
+func DetermineFinalSymbols(reRootExpr *re.Expression, occurences SymbolOccurences) gp.Set[Symbol] {
 	symbols := gp.NewSet[Symbol]()
 	exprStack := gp.NewStack[*re.Expression]()
 	exprStack.Push(reRootExpr)
@@ -124,70 +118,115 @@ func determineFinalSymbols(reRootExpr *re.Expression, alphabet Alphabet) gp.Set[
 		case re.UNARY_EXPR:
 			exprStack.Push(e.LExpr)
 		case re.ATOMIC:
-			s, ok := alphabet[e.Atom]
-			if !ok {
-				s = addSymbolToAlphabet(e.Atom, alphabet)
-			}
+			s, _ := occurences[e.Atom]
 			symbols.Add(s)
 		}
 	}
 	return symbols
 }
 
-// type frame struct {
-// 	Expr    *re.Expression
-// 	Visited bool
-// }
+/*
+Struct used to represent symbols that are reachable from the left and right of an expression.
 
-// func determineSymbolPairs(reRootExpr *re.Expression, alphabet Alphabet) gp.Set[Symbol] {
-// 	symPairs := gp.NewSet[SymbolPair]()
-// 	frameStack := gp.NewStack[frame]()
-// 	firstFrame := frame{reRootExpr, false}
-// 	frameStack.Push(firstFrame)
-// 	possiblePairs := []Symbol{}
-// 	for frameStack.Len() > 0 {
-// 		f, _ := frameStack.Pop()
+Used to determine possible symbol pairs for expressions.
+*/
+type reachableSymbols struct {
+	LeftReachable  gp.Set[Symbol]
+	RightReachable gp.Set[Symbol]
+}
 
-// 		// Stop Condition
-// 		if f.Expr.Type == re.ATOMIC {
-// 			// Lookup symbol in occurences
-// 			s, _ := alphabet[f.Expr.Atom]
-// 			// Add to possiblePairs
-// 			possiblePairs = append(possiblePairs, s)
-// 		}
-
-// 		if f.Visited {
-// 			// Unwind
-// 			// Build possible pairs based on type
-
-// 		} else {
-// 			// Push current
-// 			frameStack.Push(frame{f.Expr, true})
-
-// 			// Push next based on type
-// 			switch f.Expr.Type {
-// 			case re.UNARY_EXPR:
-// 				frameStack.Push(frame{f.Expr.LExpr, false})
-// 			case re.BINARY_EXPR:
-// 				frameStack.Push(frame{f.Expr.RExpr, false}, frame{f.Expr.LExpr, false})
-// 			}
-// 		}
-// 	}
-// }
-
-func determineSymbolPairs(symPairs gp.Set[SymbolPair], expr *re.Expression, alphabet Alphabet) (gp.Set[SymbolPair], []Symbol) {
-	possibleSymbols := []Symbol{}
+func DetermineSymbolPairs(symPairs *gp.Set[SymbolPair], expr *re.Expression, occurences SymbolOccurences) reachableSymbols {
+	reachables := reachableSymbols{}
 	switch expr.Type {
 	case re.ATOMIC:
-		// Add possible symbol
-		s, _ := alphabet[expr.Atom]
-		possibleSymbols = append(possiblePairs, s)
+		// For atomic expressions, right and left reachables correspond to
+		// the symbol of the atomic expression
+		s, _ := occurences[expr.Atom]
+		reachables.LeftReachable.Add(s)
+		reachables.RightReachable.Add(s)
 	case re.UNARY_EXPR:
-		// Get possible pairs from sub expr
-		_, exprPossibleSymbols := determineSymbolPairs(symPairs, expr.LExpr, alphabet)
-		// Build pair last + first
-		sp := SymbolPair{exprPossibleSymbols[0], exprPossibleSymbols[len(exprPossibleSymbols)-1]}
-		symPairs.Add(sp)
+		// Get reachables from sub expr
+		subExprReachables := DetermineSymbolPairs(symPairs, expr.LExpr, occurences)
+
+		switch expr.Operator {
+		case '*':
+			// For kleene star, the sympairs that can be determined are the cartesian product of
+			// right reachable and left reachable sets (Rr X Lr). Those are the repetition combinations.
+			for _, vL := range subExprReachables.RightReachable.Items() {
+				for _, vR := range subExprReachables.LeftReachable.Items() {
+					sp := SymbolPair{vL, vR}
+					symPairs.Add(sp)
+				}
+			}
+			// For kleene star, left and right reachables correspond to
+			// the left and right reachables of the sub expression
+			reachables.LeftReachable.Add(subExprReachables.LeftReachable.Items()...)
+			reachables.RightReachable.Add(subExprReachables.RightReachable.Items()...)
+		case '?':
+			// For 0 or 1 quantifier, no sympairs can be computed.
+			// Forward reachable states up.
+			reachables = subExprReachables
+		case '+':
+			panic("+ NOT IMPLEMENTED YET")
+		default:
+			panic("unimplemented unary operator")
+		}
+	case re.BINARY_EXPR:
+		// Get reachables from left and right sub expressions
+		leftExprRs := DetermineSymbolPairs(symPairs, expr.LExpr, occurences)
+		rightExprRs := DetermineSymbolPairs(symPairs, expr.RExpr, occurences)
+
+		switch expr.Operator {
+		case '&':
+			// Compute sympairs. They correspond to cartesian product of left with right
+			// reachables. (Right reachables of left expr, Left reachables of right expr).
+			for _, vLR := range leftExprRs.RightReachable.Items() {
+				for _, vRL := range rightExprRs.LeftReachable.Items() {
+					sp := SymbolPair{vLR, vRL}
+					symPairs.Add(sp)
+				}
+			}
+
+			// For concatenation, left and right reachables depend on whether the sub exprs
+			// are optional or not.
+			reachables.LeftReachable.Add(leftExprRs.LeftReachable.Items()...)
+			reachables.RightReachable.Add(rightExprRs.RightReachable.Items()...)
+
+			if re.IsOptionalExpr(*expr.LExpr) {
+				// Add left reachables of right expression to left reachables of this expr
+				reachables.LeftReachable.Add(rightExprRs.LeftReachable.Items()...)
+			}
+			if re.IsOptionalExpr(*expr.RExpr) {
+				// Add right reachables of left expression to right reachables of this expr
+				reachables.RightReachable.Add(leftExprRs.RightReachable.Items()...)
+			}
+		case '|':
+			// No symbol pairs can be computed for alternation since it represents Lexpr or Rexpr
+			// Reachables correspond to the addition of left and right reachables from both expressions
+			reachables.LeftReachable.Add(leftExprRs.LeftReachable.Items()...)
+			reachables.LeftReachable.Add(rightExprRs.LeftReachable.Items()...)
+			reachables.RightReachable.Add(leftExprRs.RightReachable.Items()...)
+			reachables.RightReachable.Add(rightExprRs.RightReachable.Items()...)
+		default:
+			panic("unsupported binary operator")
+		}
 	}
-	return symPairs, possiblePairs
+	return reachables
+}
+
+func PrintSymbolPairs(pairs gopiler.Set[SymbolPair]) {
+	var b strings.Builder
+	// 0[(0a)]
+	for i, v := range pairs.Items() {
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString("[(")
+		b.WriteString(strconv.Itoa(v.S1.SymbolId))
+		b.WriteString(string(v.S1.Token.Repr))
+		b.WriteRune(')')
+		b.WriteString(",(")
+		b.WriteString(strconv.Itoa(v.S2.SymbolId))
+		b.WriteString(string(v.S2.Token.Repr))
+		b.WriteString(")] ")
+	}
+	fmt.Println(b.String())
 }

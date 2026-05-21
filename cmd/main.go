@@ -3,24 +3,20 @@ package main
 import (
 	"fmt"
 
+	"github.com/Vacheprime/gopiler"
 	re "github.com/Vacheprime/gopiler/lexer/regex"
-	th "github.com/Vacheprime/gopiler/lexer/regex/thompson"
+	gl "github.com/Vacheprime/gopiler/lexer/regex/glushkov"
 )
 
 func main() {
-	post, err := re.RegexToPostfix("{.}")
+	regex := "[a-b]c"
+	parseTree, err := re.RegexToParseTree(regex)
 	if err != nil {
 		panic(err)
 	}
-	nfa, err := th.PostfixToNFA(post)
-	if err != nil {
-		panic(err)
-	}
-
-	match, ok := th.Match(nfa, "{.}")
-	if ok {
-		fmt.Println(match)
-	} else {
-		fmt.Println("No match!")
-	}
+	occurences := gl.DetermineSymbolOccurences(parseTree)
+	symPairs := gopiler.NewSet[gl.SymbolPair]()
+	gl.DetermineSymbolPairs(&symPairs, parseTree, occurences)
+	fmt.Println(symPairs.Len())
+	gl.PrintSymbolPairs(symPairs)
 }

@@ -55,6 +55,16 @@ type Expression struct {
 	Atom     *RegexToken
 }
 
+func IsOptionalExpr(e Expression) bool {
+	if e.Type != UNARY_EXPR {
+		return false
+	}
+	return e.Operator == '*' || e.Operator == '?'
+}
+
+/*
+Transfers a regex into a parse tree.
+*/
 func RegexToParseTree(regex string) (*Expression, error) {
 	// Get tokens as postfix
 	tks, err := RegexToPostfix(regex)

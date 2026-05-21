@@ -34,8 +34,8 @@ func TestDetermineStartSymbols(t *testing.T) {
 			if err != nil {
 				t.Errorf("got error while creating parse tree %s", err)
 			}
-			alphabet := make(map[*re.RegexToken]Symbol)
-			symbols := determineStartSymbols(expr, alphabet)
+			occurences := DetermineSymbolOccurences(expr)
+			symbols := DetermineStartSymbols(expr, occurences)
 			res := symbolsToString(symbols)
 			if res != tt.want {
 				t.Errorf("got %s, want %s", res, tt.want)
@@ -62,8 +62,8 @@ func TestDetermineFinalSymbols(t *testing.T) {
 			if err != nil {
 				t.Errorf("got error while creating parse tree %s", err)
 			}
-			alphabet := make(map[*re.RegexToken]Symbol)
-			symbols := determineFinalSymbols(expr, alphabet)
+			occurences := DetermineSymbolOccurences(expr)
+			symbols := DetermineFinalSymbols(expr, occurences)
 			res := symbolsToString(symbols)
 			if res != tt.want {
 				t.Errorf("got %s, want %s", res, tt.want)
@@ -91,7 +91,7 @@ func TestDetermineAlphabet(t *testing.T) {
 			if err != nil {
 				t.Errorf("got error while creating parse tree %s", err)
 			}
-			alphabet := determineAlphabet(expr)
+			alphabet := DetermineSymbolOccurences(expr)
 			res := len(alphabet)
 			if res != tt.want {
 				t.Errorf("got %d, want %d", res, tt.want)
