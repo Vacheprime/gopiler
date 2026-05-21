@@ -34,9 +34,9 @@ func TestDetermineStartSymbols(t *testing.T) {
 			if err != nil {
 				t.Errorf("got error while creating parse tree %s", err)
 			}
-			occurences := DetermineSymbolOccurences(expr)
-			symbols := DetermineStartSymbols(expr, occurences)
-			res := symbolsToString(symbols)
+			symInfo := BuildSymbolInformation(expr)
+			//symbols := DetermineStartSymbols(expr, occurences)
+			res := symbolsToString(symInfo.StartSymbols)
 			if res != tt.want {
 				t.Errorf("got %s, want %s", res, tt.want)
 			}
@@ -51,10 +51,10 @@ func TestDetermineFinalSymbols(t *testing.T) {
 		want  string
 	}{
 		{"abc should be c", "abc", "c"},
-		{"a|b should be ba", "a|b", "ba"},
+		{"a|b should be ba", "a|b", "ab"},
 		{"a*b should be b", "a*b", "b"},
 		{"(a|b)*c should be c", "(a|b)*c", "c"},
-		{"(a(ab)*)*|(ba)* should be ab", "(a(ab)*)*|(ba)*", "aba"},
+		{"(a(ab)*)*|(ba)* should be ab", "(a(ab)*)*|(ba)*", "baa"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -62,9 +62,9 @@ func TestDetermineFinalSymbols(t *testing.T) {
 			if err != nil {
 				t.Errorf("got error while creating parse tree %s", err)
 			}
-			occurences := DetermineSymbolOccurences(expr)
-			symbols := DetermineFinalSymbols(expr, occurences)
-			res := symbolsToString(symbols)
+			symInfo := BuildSymbolInformation(expr)
+			//symbols := DetermineStartSymbols(expr, occurences)
+			res := symbolsToString(symInfo.FinalSymbols)
 			if res != tt.want {
 				t.Errorf("got %s, want %s", res, tt.want)
 			}
@@ -72,7 +72,7 @@ func TestDetermineFinalSymbols(t *testing.T) {
 	}
 }
 
-func TestDetermineAlphabet(t *testing.T) {
+func TestDetermineOccurences(t *testing.T) {
 	var tests = []struct {
 		name  string
 		input string
@@ -91,8 +91,9 @@ func TestDetermineAlphabet(t *testing.T) {
 			if err != nil {
 				t.Errorf("got error while creating parse tree %s", err)
 			}
-			alphabet := DetermineSymbolOccurences(expr)
-			res := len(alphabet)
+
+			symInfo := BuildSymbolInformation(expr)
+			res := len(symInfo.Occurences)
 			if res != tt.want {
 				t.Errorf("got %d, want %d", res, tt.want)
 			}
