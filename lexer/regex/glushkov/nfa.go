@@ -36,10 +36,10 @@ func AddSymbolToOccurences(tk *re.RegexToken, occurences SymbolOccurences) Symbo
 
 func BuildSymbolInformation(reRootExpr *re.Expression) SymbolInformation {
 	symPairs := gp.NewSet[SymbolPair]()
-	return DetermineSymbolPairs(reRootExpr, SymbolInformation{SymbolPairs: &symPairs, Occurences: map[*re.RegexToken]Symbol{}})
+	return determineSymbolPairs(reRootExpr, SymbolInformation{SymbolPairs: &symPairs, Occurences: map[*re.RegexToken]Symbol{}})
 }
 
-func DetermineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) SymbolInformation {
+func determineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) SymbolInformation {
 	switch expr.Type {
 	case re.ATOMIC:
 		// For atomic expressions, right and left reachables correspond to
@@ -52,7 +52,7 @@ func DetermineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) Symbol
 		symInfo.FinalSymbols.Add(s)
 	case re.UNARY_EXPR:
 		// Get reachables from sub expr
-		subExprReachables := DetermineSymbolPairs(expr.LExpr, symInfo)
+		subExprReachables := determineSymbolPairs(expr.LExpr, symInfo)
 
 		switch expr.Operator {
 		case '*':
@@ -78,8 +78,8 @@ func DetermineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) Symbol
 		}
 	case re.BINARY_EXPR:
 		// Get reachables from left and right sub expressions
-		leftExprRs := DetermineSymbolPairs(expr.LExpr, symInfo)
-		rightExprRs := DetermineSymbolPairs(expr.RExpr, symInfo)
+		leftExprRs := determineSymbolPairs(expr.LExpr, symInfo)
+		rightExprRs := determineSymbolPairs(expr.RExpr, symInfo)
 
 		switch expr.Operator {
 		case '&':
