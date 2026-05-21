@@ -175,4 +175,19 @@ func determineFinalSymbols(reRootExpr *re.Expression, alphabet Alphabet) gp.Set[
 // 	}
 // }
 
-func determineSymbolPairs()
+func determineSymbolPairs(symPairs gp.Set[SymbolPair], expr *re.Expression, alphabet Alphabet) (gp.Set[SymbolPair], []Symbol) {
+	possibleSymbols := []Symbol{}
+	switch expr.Type {
+	case re.ATOMIC:
+		// Add possible symbol
+		s, _ := alphabet[expr.Atom]
+		possibleSymbols = append(possiblePairs, s)
+	case re.UNARY_EXPR:
+		// Get possible pairs from sub expr
+		_, exprPossibleSymbols := determineSymbolPairs(symPairs, expr.LExpr, alphabet)
+		// Build pair last + first
+		sp := SymbolPair{exprPossibleSymbols[0], exprPossibleSymbols[len(exprPossibleSymbols)-1]}
+		symPairs.Add(sp)
+	}
+	return symPairs, possiblePairs
+}
