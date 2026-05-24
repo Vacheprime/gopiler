@@ -55,7 +55,7 @@ func determineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) Symbol
 		subExprReachables := determineSymbolPairs(expr.LExpr, symInfo)
 
 		switch expr.Operator {
-		case '*':
+		case '*', '+':
 			// For kleene star, the sympairs that can be determined are the cartesian product of
 			// right reachable and left reachable sets (Rr X Lr). Those are the repetition combinations.
 			for _, vL := range subExprReachables.FinalSymbols.Items() {
@@ -64,18 +64,12 @@ func determineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) Symbol
 					symInfo.SymbolPairs.Add(sp)
 				}
 			}
-			// For kleene star, left and right reachables correspond to
-			// the left and right reachables of the sub expression
-			symInfo.StartSymbols.Add(subExprReachables.StartSymbols.Items()...)
-			symInfo.FinalSymbols.Add(subExprReachables.FinalSymbols.Items()...)
-		case '?':
-			// For 0 or 1 quantifier, no sympairs can be computed.
-			// Forward reachable states up.
-		case '+':
-			panic("+ NOT IMPLEMENTED YET")
 		default:
-			panic("unimplemented unary operator")
 		}
+		// For Unary expressions, left and right reachables correspond to
+		// the left and right reachables of the sub expression
+		symInfo.StartSymbols.Add(subExprReachables.StartSymbols.Items()...)
+		symInfo.FinalSymbols.Add(subExprReachables.FinalSymbols.Items()...)
 	case re.BINARY_EXPR:
 		// Get reachables from left and right sub expressions
 		leftExprRs := determineSymbolPairs(expr.LExpr, symInfo)
