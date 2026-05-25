@@ -10,7 +10,7 @@ import (
 	re "github.com/Vacheprime/gopiler/lexer/regex"
 )
 
-type SymbolOccurences map[*re.RegexToken]Symbol
+type SymbolOccurrences map[*re.RegexToken]Symbol
 
 type IdCharacterRange struct {
 	re.CharacterClass
@@ -20,17 +20,24 @@ type IdCharacterRange struct {
 type SymbolClassifier struct {
 	Singulars map[rune]int
 	Classes   []IdCharacterRange
+	// Add a map for symbol to class ID for building
 }
 
-func BuildClassifier(occurences SymbolOccurences) (SymbolClassifier, error) {
+func (sc *SymbolClassifier) Total() int {
+	return len(sc.Singulars) + len(sc.Classes)
+}
+
+func BuildClassifier(occurrences SymbolOccurrences) (SymbolClassifier, error) {
 	classifier := SymbolClassifier{make(map[rune]int), []IdCharacterRange{}}
 	idx := 0
 	addIsAny := false
-	for _, sym := range occurences {
+	for _, sym := range occurrences {
 		tk := sym.Token
 		switch tk.Class {
 		case re.SINGLE_CHAR:
-			classifier.Singulars[tk.Repr[0]] = idx
+			if _, ok := classifier.Singulars[tk.Repr[0]]; !ok {
+				classifier.Singulars[tk.Repr[0]] = idx
+			}
 		case re.CHAR_CLASS:
 			charClass, err := re.NewCharacterClass(*tk)
 			if err != nil {
@@ -87,6 +94,9 @@ outer:
 // The NFA would store a table array where the
 // row is the state, column the input char class, and the value is the set of states.
 type NFA struct {
+	Classifier  SymbolClassifier
+	Transitions [][]gp.BitSet
+	FinalStates gp.BitSet
 }
 
 type Symbol struct {
@@ -103,18 +113,18 @@ type SymbolInformation struct {
 	StartSymbols gp.Set[Symbol]
 	FinalSymbols gp.Set[Symbol]
 	SymbolPairs  *gp.Set[SymbolPair]
-	Occurences   SymbolOccurences
+	Occurrences  SymbolOccurrences
 }
 
-func AddSymbolToOccurences(tk *re.RegexToken, occurences SymbolOccurences) Symbol {
-	s := Symbol{len(occurences) + 1, tk}
-	occurences[tk] = s
+func AddSymbolToOccurrences(tk *re.RegexToken, occurrences SymbolOccurrences) Symbol {
+	s := Symbol{len(occurrences) + 1, tk}
+	occurrences[tk] = s
 	return s
 }
 
 func BuildSymbolInformation(reRootExpr *re.Expression) SymbolInformation {
 	symPairs := gp.NewSet[SymbolPair]()
-	return determineSymbolPairs(reRootExpr, SymbolInformation{SymbolPairs: &symPairs, Occurences: map[*re.RegexToken]Symbol{}})
+	return determineSymbolPairs(reRootExpr, SymbolInformation{SymbolPairs: &symPairs, Occurrences: map[*re.RegexToken]Symbol{}})
 }
 
 func determineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) SymbolInformation {
@@ -122,9 +132,9 @@ func determineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) Symbol
 	case re.ATOMIC:
 		// For atomic expressions, right and left reachables correspond to
 		// the symbol of the atomic expression
-		s, ok := symInfo.Occurences[expr.Atom]
+		s, ok := symInfo.Occurrences[expr.Atom]
 		if !ok {
-			s = AddSymbolToOccurences(expr.Atom, symInfo.Occurences)
+			s = AddSymbolToOccurrences(expr.Atom, symInfo.Occurrences)
 		}
 		symInfo.StartSymbols.Add(s)
 		symInfo.FinalSymbols.Add(s)
@@ -191,8 +201,28 @@ func determineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) Symbol
 	return symInfo
 }
 
-func BuildNFA(symInfo SymbolInformation) {
+func BuildNFA(symInfo SymbolInformation) (NFA, error) {
+	classifier, err := BuildClassifier(symInfo.Occurrences)
+	if err != nil {
+		return NFA{}, err
+	}
+	totalStates := len(symInfo.Occurrences)
+	totalClassIds := classifier.Total()
+	symToState := map[Symbol]int{} // Map for symbol to state index
+	// Create all nodes
+	transitions := make([][]gp.BitSet, totalStates)
+	transitions = append(transitions, make([]gp.BitSet, totalClassIds))
+	for _, sym := range symInfo.Occurrences {
+		symToState[sym] = len(transitions)
+		transitions = append(transitions, make([]gp.BitSet, totalClassIds))
+	}
+	// Create transitions for first state
+	for _, sym := range symInfo.StartSymbols.Items() {
+		// Get the transition idx from the map of symbol to class ID
+		// Create bitset
+		//
 
+	}
 }
 
 func PrintSymbolPairs(pairs []SymbolPair) {

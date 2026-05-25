@@ -93,7 +93,7 @@ func TestDetermineOccurences(t *testing.T) {
 			}
 
 			symInfo := BuildSymbolInformation(expr)
-			res := len(symInfo.Occurences)
+			res := len(symInfo.Occurrences)
 			if res != tt.want {
 				t.Errorf("got %d, want %d", res, tt.want)
 			}
