@@ -2,6 +2,7 @@ package gopiler
 
 import (
 	"errors"
+	"math"
 	"slices"
 )
 
@@ -87,4 +88,25 @@ func (s *Set[T]) Contains(item T) bool {
 
 func (s *Set[T]) Items() []T {
 	return s.items
+}
+
+type BitSet struct {
+	Bits []uint64
+}
+
+func NewBitSet(minBitNbr uint) BitSet {
+	length := int(math.Ceil(float64(minBitNbr) / 64))
+	return BitSet{make([]uint64, length)}
+}
+
+func (bs *BitSet) Set(bitPos uint) {
+	intPos := uint(math.Floor(float64(bitPos) / 64))
+	realBitPos := bitPos % 64
+	bs.Bits[intPos] |= 1 << realBitPos
+}
+
+func (bs *BitSet) Unset(bitPos uint) {
+	intPos := uint(math.Floor(float64(bitPos) / 64))
+	realBitPos := bitPos % 64
+	bs.Bits[intPos] &^= 1 << realBitPos
 }

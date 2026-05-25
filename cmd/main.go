@@ -3,18 +3,13 @@ package main
 import (
 	"fmt"
 
-	re "github.com/Vacheprime/gopiler/lexer/regex"
-	gl "github.com/Vacheprime/gopiler/lexer/regex/glushkov"
+	"github.com/Vacheprime/gopiler"
 )
 
 func main() {
-	regex := "(a|b)*c"
-	parseTree, err := re.RegexToParseTree(regex)
-	if err != nil {
-		panic(err)
-	}
-	symInfo := gl.BuildSymbolInformation(parseTree)
-	fmt.Println(symInfo.SymbolPairs.Len())
-	fmt.Println(symInfo.StartSymbols.Len())
-	gl.PrintSymbolPairs(symInfo.SymbolPairs.Items())
+	bitSet := gopiler.NewBitSet(1)
+	bitSet.Set(1)
+	bitSet.Set(0)
+	bitSet.Unset(1)
+	fmt.Println(bitSet.Bits[0])
 }

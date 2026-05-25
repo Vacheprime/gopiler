@@ -2,6 +2,7 @@ package glushkov
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,83 @@ import (
 )
 
 type SymbolOccurences map[*re.RegexToken]Symbol
+
+type IdCharacterRange struct {
+	re.CharacterClass
+	id int
+}
+
+type SymbolClassifier struct {
+	Singulars map[rune]int
+	Classes   []IdCharacterRange
+}
+
+func BuildClassifier(occurences SymbolOccurences) (SymbolClassifier, error) {
+	classifier := SymbolClassifier{make(map[rune]int), []IdCharacterRange{}}
+	idx := 0
+	addIsAny := false
+	for _, sym := range occurences {
+		tk := sym.Token
+		switch tk.Class {
+		case re.SINGLE_CHAR:
+			classifier.Singulars[tk.Repr[0]] = idx
+		case re.CHAR_CLASS:
+			charClass, err := re.NewCharacterClass(*tk)
+			if err != nil {
+				return SymbolClassifier{}, re.ErrInvalidCharClass
+			}
+			classifier.Classes = append(classifier.Classes, IdCharacterRange{charClass, idx})
+		case re.ANY_CHAR:
+			if addIsAny {
+				continue
+			}
+			addIsAny = true
+		}
+		idx++
+	}
+	// Add any char class at the end
+	if addIsAny {
+		reRange := re.CharacterRange{Start: 0, End: math.MaxInt32}
+		charClass := re.CharacterClass{Singulars: []rune{}, Ranges: []re.CharacterRange{reRange}}
+		classifier.Classes = append(classifier.Classes, IdCharacterRange{charClass, idx})
+	}
+	return classifier, nil
+}
+
+func (sc *SymbolClassifier) Classify(r rune) []int {
+	classes := []int{}
+	// Check if rune is a part of singular (highest priority)
+	id, ok := sc.Singulars[r]
+	if ok {
+		classes = append(classes, id)
+	}
+	// Check if rune is a part of any one or more character classes (second priority)
+outer:
+	for _, cri := range sc.Classes {
+		// Check for match in singulars
+		for _, v := range cri.Singulars {
+			if v == r {
+				classes = append(classes, cri.id)
+				continue outer
+			}
+		}
+
+		// Check for match in ranges
+		for _, cr := range cri.Ranges {
+			if r >= cr.Start && r <= cr.End {
+				classes = append(classes, cri.id)
+				continue outer
+			}
+		}
+	}
+	return classes
+}
+
+// Attempt to implement a table-based NFA.
+// The NFA would store a table array where the
+// row is the state, column the input char class, and the value is the set of states.
+type NFA struct {
+}
 
 type Symbol struct {
 	SymbolId int
@@ -111,6 +189,10 @@ func determineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) Symbol
 		}
 	}
 	return symInfo
+}
+
+func BuildNFA(symInfo SymbolInformation) {
+
 }
 
 func PrintSymbolPairs(pairs []SymbolPair) {

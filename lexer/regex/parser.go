@@ -34,6 +34,42 @@ const (
 	ATOMIC
 )
 
+type CharacterClass struct {
+	Singulars []rune
+	Ranges    []CharacterRange
+}
+
+type CharacterRange struct {
+	Start rune
+	End   rune
+}
+
+func NewCharacterClass(tk RegexToken) (CharacterClass, error) {
+	acceptedRanges := []CharacterRange{}
+	acceptedSingulars := []rune{}
+	for i := 1; i < len(tk.Repr)-1; i++ {
+		curr := tk.Repr[i]
+		next := tk.Repr[i+1]
+		if next == '-' {
+			// Check for end of range
+			if i+2 >= len(tk.Repr) {
+				return CharacterClass{}, ErrInvalidCharClass
+			}
+			// Process the end of range
+			end := tk.Repr[i+2]
+			if end < curr {
+				return CharacterClass{}, ErrInvalidCharClass
+			}
+			// Append range
+			acceptedRanges = append(acceptedRanges, CharacterRange{curr, end})
+			i += 2 // Skip 2 to land after char range
+			continue
+		}
+		acceptedSingulars = append(acceptedSingulars, curr)
+	}
+	return CharacterClass{acceptedSingulars, acceptedRanges}, nil
+}
+
 type RegexToken struct {
 	Class RegexTokenType
 	Repr  []rune
