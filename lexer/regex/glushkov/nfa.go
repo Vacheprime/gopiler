@@ -120,6 +120,7 @@ type SymbolInformation struct {
 	FinalSymbols gp.Set[Symbol]
 	SymbolPairs  *gp.Set[SymbolPair]
 	Occurrences  SymbolOccurrences
+	AcceptsEmpty bool
 }
 
 func AddSymbolToOccurrences(tk *re.RegexToken, occurrences SymbolOccurrences) Symbol {
@@ -158,6 +159,12 @@ func determineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) Symbol
 					symInfo.SymbolPairs.Add(sp)
 				}
 			}
+			// * and ? accept empty string
+			if expr.Operator == '*' {
+				symInfo.AcceptsEmpty = true
+			}
+		case '?':
+			symInfo.AcceptsEmpty = true
 		default:
 		}
 		// For Unary expressions, left and right reachables correspond to
@@ -168,6 +175,12 @@ func determineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) Symbol
 		// Get reachables from left and right sub expressions
 		leftExprRs := determineSymbolPairs(expr.LExpr, symInfo)
 		rightExprRs := determineSymbolPairs(expr.RExpr, symInfo)
+
+		// Binary expr accept empty strings if both the left and right expr accept
+		// the empty string
+		if leftExprRs.AcceptsEmpty && rightExprRs.AcceptsEmpty {
+			symInfo.AcceptsEmpty = true
+		}
 
 		switch expr.Operator {
 		case '&':
@@ -240,6 +253,10 @@ func BuildNFA(symInfo SymbolInformation) (NFA, error) {
 			state[classId] = bitSet
 		}
 		bitSet.Set(uint(stateIdx))
+	}
+	// Add initial state to final states if the expr accepts empty strings
+	if symInfo.AcceptsEmpty {
+		finalStates.Set(0)
 	}
 	// Create all transitions
 	for _, sym := range symInfo.Occurrences {
