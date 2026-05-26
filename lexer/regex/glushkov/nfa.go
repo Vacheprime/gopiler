@@ -20,7 +20,7 @@ type IdCharacterRange struct {
 type SymbolClassifier struct {
 	Singulars map[rune]int
 	Classes   []IdCharacterRange
-	// Add a map for symbol to class ID for building
+	SymToId   map[Symbol]int
 }
 
 func (sc *SymbolClassifier) Total() int {
@@ -28,35 +28,41 @@ func (sc *SymbolClassifier) Total() int {
 }
 
 func BuildClassifier(occurrences SymbolOccurrences) (SymbolClassifier, error) {
-	classifier := SymbolClassifier{make(map[rune]int), []IdCharacterRange{}}
+	classifier := SymbolClassifier{make(map[rune]int), []IdCharacterRange{}, map[Symbol]int{}}
 	idx := 0
-	addIsAny := false
+	var anyCharClass *IdCharacterRange
 	for _, sym := range occurrences {
 		tk := sym.Token
 		switch tk.Class {
 		case re.SINGLE_CHAR:
-			if _, ok := classifier.Singulars[tk.Repr[0]]; !ok {
+			id, ok := classifier.Singulars[tk.Repr[0]]
+			if !ok {
 				classifier.Singulars[tk.Repr[0]] = idx
+				id = idx
 			}
+			classifier.SymToId[sym] = id
 		case re.CHAR_CLASS:
 			charClass, err := re.NewCharacterClass(*tk)
 			if err != nil {
 				return SymbolClassifier{}, re.ErrInvalidCharClass
 			}
+			classifier.SymToId[sym] = idx
 			classifier.Classes = append(classifier.Classes, IdCharacterRange{charClass, idx})
 		case re.ANY_CHAR:
-			if addIsAny {
+			if anyCharClass != nil {
+				classifier.SymToId[sym] = anyCharClass.id
 				continue
 			}
-			addIsAny = true
+			anyRange := re.CharacterRange{Start: 0, End: math.MaxInt32}
+			charClass := re.CharacterClass{Singulars: []rune{}, Ranges: []re.CharacterRange{anyRange}}
+			anyCharClass = &IdCharacterRange{charClass, idx}
+			classifier.SymToId[sym] = idx
 		}
 		idx++
 	}
-	// Add any char class at the end
-	if addIsAny {
-		reRange := re.CharacterRange{Start: 0, End: math.MaxInt32}
-		charClass := re.CharacterClass{Singulars: []rune{}, Ranges: []re.CharacterRange{reRange}}
-		classifier.Classes = append(classifier.Classes, IdCharacterRange{charClass, idx})
+	// Append any character class at the end for least priority
+	if anyCharClass != nil {
+		classifier.Classes = append(classifier.Classes, *anyCharClass)
 	}
 	return classifier, nil
 }
@@ -206,23 +212,68 @@ func BuildNFA(symInfo SymbolInformation) (NFA, error) {
 	if err != nil {
 		return NFA{}, err
 	}
-	totalStates := len(symInfo.Occurrences)
+	totalStates := len(symInfo.Occurrences) + 1
 	totalClassIds := classifier.Total()
-	symToState := map[Symbol]int{} // Map for symbol to state index
+	symToState := map[Symbol]int{}
+	finalStates := gp.NewBitSet(uint(totalStates))
 	// Create all nodes
+	transitionIdx := 1
 	transitions := make([][]gp.BitSet, totalStates)
-	transitions = append(transitions, make([]gp.BitSet, totalClassIds))
+	transitions[0] = make([]gp.BitSet, totalClassIds)
 	for _, sym := range symInfo.Occurrences {
-		symToState[sym] = len(transitions)
-		transitions = append(transitions, make([]gp.BitSet, totalClassIds))
+		symToState[sym] = transitionIdx
+		transitions[transitionIdx] = make([]gp.BitSet, totalClassIds)
+		// Set final states
+		if symInfo.FinalSymbols.Contains(sym) {
+			finalStates.Set(uint(transitionIdx))
+		}
+		transitionIdx++
 	}
-	// Create transitions for first state
+	// Create transitions for initial state
+	state := transitions[0]
 	for _, sym := range symInfo.StartSymbols.Items() {
-		// Get the transition idx from the map of symbol to class ID
-		// Create bitset
-		//
-
+		stateIdx := symToState[sym]
+		classId := classifier.SymToId[sym]
+		bitSet := state[classId]
+		if bitSet.Bits == nil {
+			bitSet = gp.NewBitSet(uint(totalStates))
+			state[classId] = bitSet
+		}
+		bitSet.Set(uint(stateIdx))
 	}
+	// Create all transitions
+	for _, sym := range symInfo.Occurrences {
+		// Current state
+		state := transitions[symToState[sym]]
+		// Get related pairs
+		relatedPairs := filterPairsByStart(sym, symInfo.SymbolPairs.Items())
+		for _, p := range relatedPairs {
+			// Get state ID of next state
+			stateIdx := symToState[p.S2]
+
+			// Get class ID associated with next state
+			classId := classifier.SymToId[p.S2]
+			bitSet := state[classId]
+			if bitSet.Bits == nil {
+				bitSet = gp.NewBitSet(uint(totalStates))
+				state[classId] = bitSet
+			}
+
+			// Add transition
+			bitSet.Set(uint(stateIdx))
+		}
+	}
+	return NFA{classifier, transitions, finalStates}, nil
+}
+
+func filterPairsByStart(sym Symbol, pairs []SymbolPair) []SymbolPair {
+	filteredPairs := []SymbolPair{}
+	for _, p := range pairs {
+		if p.S1 == sym {
+			filteredPairs = append(filteredPairs, p)
+		}
+	}
+	return filteredPairs
 }
 
 func PrintSymbolPairs(pairs []SymbolPair) {
