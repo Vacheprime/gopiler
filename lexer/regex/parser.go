@@ -92,10 +92,18 @@ type Expression struct {
 }
 
 func IsOptionalExpr(e Expression) bool {
-	if e.Type != UNARY_EXPR {
-		return false
+	var isOptional bool
+	switch e.Type {
+	case ATOMIC:
+		// Atomic expressions aren't considered optional
+	case UNARY_EXPR:
+		if e.Operator == '*' || e.Operator == '?' {
+			isOptional = true // Don't require any so not optional
+		}
+	case BINARY_EXPR:
+		return IsOptionalExpr(*e.LExpr) && IsOptionalExpr(*e.RExpr)
 	}
-	return e.Operator == '*' || e.Operator == '?'
+	return isOptional
 }
 
 /*

@@ -11,7 +11,8 @@ func TestExplicitConcatenation(t *testing.T) {
 		want  string
 	}{
 		{"abc should be a&b&c&", "abc", "a&b&c"},
-		{"a*b should be a*b&", "a*b", "a*&b"},
+		{"a*b should be a*&b", "a*b", "a*&b"},
+		{"a*b*c should be a*&b*&c", "a*b*c", "a*&b*&c"},
 		{"(a*)* should be (a*)*", "(a*)*", "(a*)*"},
 		{"(a)(b) should be (a)&(b)", "(a)(b)", "(a)&(b)"},
 		{"(a*)*b((a+b)*e) should be (a*)*&b&((a+&b)*&e)", "(a*)*b((a+b)*e)", "(a*)*&b&((a+&b)*&e)"},

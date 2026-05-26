@@ -106,21 +106,54 @@ func (bs *BitSet) Set(bitPos uint) {
 	bs.Bits[intPos] |= 1 << realBitPos
 }
 
-func (bs *BitSet) Unset(bitPos uint) {
-	intPos := uint(math.Floor(float64(bitPos) / 64))
-	realBitPos := bitPos % 64
-	bs.Bits[intPos] &^= 1 << realBitPos
+func (bs *BitSet) Unset(bitPos ...uint) {
+	for _, num := range bitPos {
+		intPos := uint(math.Floor(float64(num) / 64))
+		realBitPos := num % 64
+		bs.Bits[intPos] &^= 1 << realBitPos
+	}
+
 }
 
-func (bs *BitSet) GetActiveBitPositions() []int {
-	var positions []int
+func (bs *BitSet) GetActiveBitPositions() []uint {
+	var positions []uint
 	for idx, integer := range bs.Bits {
 		for integer != 0 {
 			bit := bits.TrailingZeros64(integer)
-			pos := idx*64 + bit
+			pos := uint(idx*64 + bit)
 			integer &= integer - 1
 			positions = append(positions, pos)
 		}
 	}
 	return positions
+}
+
+func (bs *BitSet) Or(other BitSet) {
+	for i := range bs.Bits {
+		bs.Bits[i] |= other.Bits[i]
+	}
+}
+
+func (bs *BitSet) And(other BitSet) {
+	for i := range bs.Bits {
+		bs.Bits[i] &= other.Bits[i]
+	}
+}
+
+func (bs *BitSet) Overlaps(other BitSet) bool {
+	for i := range bs.Bits {
+		if bs.Bits[i]&other.Bits[i] != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (bs *BitSet) IsZero() bool {
+	for _, num := range bs.Bits {
+		if num != 0 {
+			return false
+		}
+	}
+	return true
 }

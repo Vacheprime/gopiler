@@ -3,15 +3,22 @@ package main
 import (
 	"fmt"
 
-	"github.com/Vacheprime/gopiler"
+	re "github.com/Vacheprime/gopiler/lexer/regex"
+	gl "github.com/Vacheprime/gopiler/lexer/regex/glushkov"
 )
 
 func main() {
-	bitSet := gopiler.NewBitSet(10)
-	bitSet.Set(1)
-	bitSet.Set(0)
-	bitSet.Set(54)
-	for _, v := range bitSet.GetActiveBitPositions() {
-		fmt.Println(v)
+	expr, _ := re.RegexToParseTree("(a|b)*[a]")
+	symInfo := gl.BuildSymbolInformation(expr)
+	gl.PrintSymbolPairs(symInfo.SymbolPairs.Items())
+	nfa, err := gl.BuildNFA(symInfo)
+	if err != nil {
+		panic(err)
+	}
+	match, ok := gl.Match("aa", nfa)
+	if !ok {
+		fmt.Println("No match!")
+	} else {
+		fmt.Println(match.Match)
 	}
 }

@@ -27,6 +27,8 @@ func TestDetermineStartSymbols(t *testing.T) {
 		{"a*b should be ab", "a*b", "ab"},
 		{"(a|b)*c should be abc", "(a|b)*c", "abc"},
 		{"(a(ab)*)*|(ba*) should be ab", "(a(ab)*)*|(ba*)", "ab"},
+		{"a*b should be ab", "a*b", "ab"},
+		{"a*b*c should be abc", "a*b*c", "abc"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
