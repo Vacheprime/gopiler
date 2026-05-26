@@ -3,6 +3,7 @@ package gopiler
 import (
 	"errors"
 	"math"
+	"math/bits"
 	"slices"
 )
 
@@ -109,4 +110,17 @@ func (bs *BitSet) Unset(bitPos uint) {
 	intPos := uint(math.Floor(float64(bitPos) / 64))
 	realBitPos := bitPos % 64
 	bs.Bits[intPos] &^= 1 << realBitPos
+}
+
+func (bs *BitSet) GetActiveBitPositions() []int {
+	var positions []int
+	for idx, integer := range bs.Bits {
+		for integer != 0 {
+			bit := bits.TrailingZeros64(integer)
+			pos := idx*64 + bit
+			integer &= integer - 1
+			positions = append(positions, pos)
+		}
+	}
+	return positions
 }
