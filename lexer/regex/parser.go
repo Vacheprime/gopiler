@@ -280,6 +280,8 @@ func tokenizeRegex(regex string) ([]RegexToken, error) {
 			tokens = append(tokens, *tk)
 			// Skip charsRead
 			i += charsRead
+		case c == '.':
+			tokens = append(tokens, RegexToken{ANY_CHAR, []rune{c}})
 		default:
 			tokens = append(tokens, RegexToken{SINGLE_CHAR, []rune{c}})
 		}
