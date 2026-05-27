@@ -10,7 +10,7 @@ type ReMatch struct {
 	Match      string
 }
 
-func Match(search string, nfa NFA) (ReMatch, bool) {
+func Match(search string, nfa NFA) (ReMatch, uint, bool) {
 	chars := []rune(search)
 	totalStates := uint(len(nfa.Transitions))
 	latestMatch := ReMatch{0, -1, ""}
@@ -20,6 +20,7 @@ func Match(search string, nfa NFA) (ReMatch, bool) {
 	if nfa.FinalStates.Bits[0]&1<<0 != 0 {
 		latestMatch.EndIndex = 0
 	}
+	var consumedChars uint = 0
 	for i, c := range chars {
 		// Get rune class ID
 		cIds := nfa.Classifier.Classify(c)
@@ -55,6 +56,9 @@ func Match(search string, nfa NFA) (ReMatch, bool) {
 		if newStates.IsZero() {
 			break // No transitions possible
 		}
+		// Char counts as consumed if it advances the automaton
+		consumedChars++
+
 		// Set the new states
 		currentStates = newStates
 
@@ -64,5 +68,5 @@ func Match(search string, nfa NFA) (ReMatch, bool) {
 			latestMatch.Match = string(chars[latestMatch.StartIndex : latestMatch.EndIndex+1])
 		}
 	}
-	return latestMatch, latestMatch.EndIndex != -1
+	return latestMatch, consumedChars, latestMatch.EndIndex != -1
 }
