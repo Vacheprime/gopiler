@@ -39,6 +39,7 @@ func BuildClassifier(occurrences SymbolOccurrences) (SymbolClassifier, error) {
 			if !ok {
 				classifier.Singulars[tk.Repr[0]] = idx
 				id = idx
+				idx++
 			}
 			classifier.SymToId[sym] = id
 		case re.CHAR_CLASS:
@@ -48,6 +49,7 @@ func BuildClassifier(occurrences SymbolOccurrences) (SymbolClassifier, error) {
 			}
 			classifier.SymToId[sym] = idx
 			classifier.Classes = append(classifier.Classes, IdCharacterRange{charClass, idx})
+			idx++
 		case re.ANY_CHAR:
 			if anyCharClass != nil {
 				classifier.SymToId[sym] = anyCharClass.id
@@ -57,8 +59,8 @@ func BuildClassifier(occurrences SymbolOccurrences) (SymbolClassifier, error) {
 			charClass := re.CharacterClass{Singulars: []rune{}, Ranges: []re.CharacterRange{anyRange}}
 			anyCharClass = &IdCharacterRange{charClass, idx}
 			classifier.SymToId[sym] = idx
+			idx++
 		}
-		idx++
 	}
 	// Append any character class at the end for least priority
 	if anyCharClass != nil {
