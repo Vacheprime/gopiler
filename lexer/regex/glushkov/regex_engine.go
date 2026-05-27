@@ -12,9 +12,10 @@ type ReMatch struct {
 
 func Match(search string, nfa NFA) (ReMatch, bool) {
 	chars := []rune(search)
+	totalStates := uint(len(nfa.Transitions))
 	latestMatch := ReMatch{0, -1, ""}
 	// Initialize current states with state 1
-	currentStates := gp.NewBitSet(uint(len(nfa.Transitions)))
+	currentStates := gp.NewBitSet(totalStates)
 	currentStates.Set(0)
 	if nfa.FinalStates.Bits[0]&1<<0 != 0 {
 		latestMatch.EndIndex = 0
@@ -28,13 +29,16 @@ func Match(search string, nfa NFA) (ReMatch, bool) {
 
 		// Loop over every state
 		activeStates := currentStates.GetActiveBitPositions()
-		newStates := gp.NewBitSet(uint(len(nfa.Transitions)))
+		newStates := gp.NewBitSet(totalStates)
 		for _, state := range activeStates {
 			// get next states
 			var nextStates gp.BitSet
 			for _, cId := range cIds {
 				s := nfa.Transitions[state][cId]
 				if s.Bits != nil {
+					if nextStates.Bits == nil {
+						nextStates = gp.NewBitSet(totalStates)
+					}
 					nextStates.Or(s)
 				}
 			}
