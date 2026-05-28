@@ -16,5 +16,7 @@ func BuildDFA(nfa gl.NFA) DFA {
 	dfa := DFA{Classifier: nfa.Classifier}
 	dfaTransitions := make([][]int, 0)
 
+	// Add initial state
+
 	return dfa
 }
