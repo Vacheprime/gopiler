@@ -8,14 +8,13 @@ import (
 )
 
 func main() {
-	expr, _ := re.RegexToParseTree("(a|b)*[a]")
+	expr, _ := re.RegexToParseTree("(ab|ac)c*[0-9A-Z]")
 	symInfo := gl.BuildSymbolInformation(expr)
-	gl.PrintSymbolPairs(symInfo.SymbolPairs.Items())
 	nfa, err := gl.BuildNFA(symInfo)
 	if err != nil {
 		panic(err)
 	}
-	match, ok := gl.Match("aa", nfa)
+	match, _, ok := gl.Match("accccY", nfa)
 	if !ok {
 		fmt.Println("No match!")
 	} else {

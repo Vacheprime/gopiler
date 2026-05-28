@@ -22,7 +22,6 @@ func Match(search string, nfa NFA) (ReMatch, uint, bool) {
 	}
 	var consumedChars uint = 0
 	for i, c := range chars {
-		// Get rune class ID
 		cIds := nfa.Classifier.Classify(c)
 		if len(cIds) == 0 {
 			break // No transitions possible
