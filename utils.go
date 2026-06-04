@@ -140,6 +140,27 @@ func (bs *BitSet) And(other BitSet) {
 	}
 }
 
+func (bs *BitSet) CreateCopy() BitSet {
+	size := uint(len(bs.Bits) * 64)
+	newBs := NewBitSet(size)
+	for i := range newBs.Bits {
+		newBs.Bits[i] = bs.Bits[i]
+	}
+	return newBs
+}
+
+func (bs *BitSet) Equals(other BitSet) bool {
+	if len(bs.Bits) != len(other.Bits) {
+		return false
+	}
+	for i := range bs.Bits {
+		if bs.Bits[i] != other.Bits[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (bs *BitSet) Overlaps(other BitSet) bool {
 	for i := range bs.Bits {
 		if bs.Bits[i]&other.Bits[i] != 0 {
