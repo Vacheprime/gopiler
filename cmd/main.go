@@ -5,19 +5,16 @@ import (
 
 	re "github.com/Vacheprime/gopiler/lexer/regex"
 	gl "github.com/Vacheprime/gopiler/lexer/regex/glushkov"
+	pw "github.com/Vacheprime/gopiler/lexer/regex/powerset"
 )
 
 func main() {
-	expr, _ := re.RegexToParseTree("(ab|ac)c*[0-9A-Z]")
+	expr, _ := re.RegexToParseTree("(ab|ac)c")
 	symInfo := gl.BuildSymbolInformation(expr)
 	nfa, err := gl.BuildNFA(symInfo)
 	if err != nil {
 		panic(err)
 	}
-	match, _, ok := gl.Match("accccY", nfa)
-	if !ok {
-		fmt.Println("No match!")
-	} else {
-		fmt.Println(match.Match)
-	}
+	dfa := pw.BuildDFA(nfa)
+	fmt.Println(dfa.Transitions)
 }

@@ -23,6 +23,7 @@ type SymbolClassifier struct {
 	SymToId   map[Symbol]int
 }
 
+/* Returns the total number of character classes. */
 func (sc *SymbolClassifier) Total() int {
 	return len(sc.Singulars) + len(sc.Classes)
 }

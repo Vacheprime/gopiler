@@ -178,3 +178,7 @@ func (bs *BitSet) IsZero() bool {
 	}
 	return true
 }
+
+func (bs *BitSet) IsNil() bool {
+	return bs.Bits == nil
+}
