@@ -179,14 +179,14 @@ func determineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) Symbol
 		leftExprRs := determineSymbolPairs(expr.LExpr, symInfo)
 		rightExprRs := determineSymbolPairs(expr.RExpr, symInfo)
 
-		// Binary expr accept empty strings if both the left and right expr accept
-		// the empty string
-		if leftExprRs.AcceptsEmpty && rightExprRs.AcceptsEmpty {
-			symInfo.AcceptsEmpty = true
-		}
-
 		switch expr.Operator {
 		case '&':
+			// Concat binary expr accept empty strings if both the left and right expr accept
+			// the empty string
+			if leftExprRs.AcceptsEmpty && rightExprRs.AcceptsEmpty {
+				symInfo.AcceptsEmpty = true
+			}
+
 			// Compute sympairs. They correspond to cartesian product of left with right
 			// reachables. (Right reachables of left expr, Left reachables of right expr).
 			for _, vLR := range leftExprRs.FinalSymbols.Items() {
@@ -210,6 +210,11 @@ func determineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) Symbol
 				symInfo.FinalSymbols.Add(leftExprRs.FinalSymbols.Items()...)
 			}
 		case '|':
+			// Alternate binary expr accept empty strings if either the left or right expr accept
+			// the empty string
+			if leftExprRs.AcceptsEmpty || rightExprRs.AcceptsEmpty {
+				symInfo.AcceptsEmpty = true
+			}
 			// No symbol pairs can be computed for alternation since it represents Lexpr or Rexpr
 			// Reachables correspond to the addition of left and right reachables from both expressions
 			symInfo.StartSymbols.Add(leftExprRs.StartSymbols.Items()...)
