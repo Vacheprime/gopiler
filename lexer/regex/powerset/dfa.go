@@ -60,6 +60,7 @@ func BuildDFA(nfa gl.NFA) DFA {
 		// Build the final DFA transition table
 		for idx, dfaState := range currDfaTransitions {
 			if dfaState.nfaStates.IsNil() {
+				dfaTransitions[currState.Pos][idx] = -1
 				continue
 			}
 			foundIdx := findDfaState(dfaState, annotatedTransitions)
@@ -84,14 +85,6 @@ func BuildDFA(nfa gl.NFA) DFA {
 	}
 	if nfa.FinalStates.Bits[0]&1<<0 != 0 {
 		dfaFinalStates.Set(0)
-	}
-	// Set nil transitions to -1
-	for _, state := range dfaTransitions {
-		for i, nextState := range state {
-			if nextState == 0 {
-				state[i] = -1
-			}
-		}
 	}
 	dfa.Transitions = dfaTransitions
 	dfa.FinalStates = dfaFinalStates
