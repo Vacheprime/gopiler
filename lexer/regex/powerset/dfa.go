@@ -23,6 +23,7 @@ func BuildDFA(nfa gl.NFA) DFA {
 	TOTAL_CHAR_CLASSES := nfa.Classifier.Total()
 	dfa := DFA{Classifier: nfa.Classifier}
 	dfaTransitions := make([][]int, 0)
+	dfaTransitions = append(dfaTransitions, make([]int, TOTAL_CHAR_CLASSES)) // Initial State
 
 	annotatedTransitions := []DFAState{}
 	dfaStateStack := gp.NewStack[DFAState]()
@@ -68,11 +69,32 @@ func BuildDFA(nfa gl.NFA) DFA {
 				annotatedTransitions = append(annotatedTransitions, dfaState)
 				dfaTransitions = append(dfaTransitions, make([]int, TOTAL_CHAR_CLASSES))
 				dfaStateCounter++
+			} else {
+				dfaState = annotatedTransitions[foundIdx]
 			}
 			dfaTransitions[currState.Pos][idx] = dfaState.Pos
 		}
 	}
+
+	dfaFinalStates := gp.NewBitSet(uint(len(dfaTransitions)))
+	for _, dfaState := range annotatedTransitions {
+		if nfa.FinalStates.Overlaps(dfaState.nfaStates) {
+			dfaFinalStates.Set(uint(dfaState.Pos))
+		}
+	}
+	if nfa.FinalStates.Bits[0]&1<<0 != 0 {
+		dfaFinalStates.Set(0)
+	}
+	// Set nil transitions to -1
+	for _, state := range dfaTransitions {
+		for i, nextState := range state {
+			if nextState == 0 {
+				state[i] = -1
+			}
+		}
+	}
 	dfa.Transitions = dfaTransitions
+	dfa.FinalStates = dfaFinalStates
 	return dfa
 }
 

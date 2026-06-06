@@ -5,6 +5,8 @@ import (
 	"math"
 	"math/bits"
 	"slices"
+	"strconv"
+	"strings"
 )
 
 var (
@@ -106,6 +108,12 @@ func (bs *BitSet) Set(bitPos uint) {
 	bs.Bits[intPos] |= 1 << realBitPos
 }
 
+func (bs *BitSet) IsSet(bitPos uint) bool {
+	intPos := uint(math.Floor(float64(bitPos) / 64))
+	realBitPos := bitPos % 64
+	return bs.Bits[intPos]&(uint64(1)<<realBitPos) != 0
+}
+
 func (bs *BitSet) Unset(bitPos ...uint) {
 	for _, num := range bitPos {
 		intPos := uint(math.Floor(float64(num) / 64))
@@ -181,4 +189,12 @@ func (bs *BitSet) IsZero() bool {
 
 func (bs *BitSet) IsNil() bool {
 	return bs.Bits == nil
+}
+
+func (bs *BitSet) ToBinaryString() string {
+	var b strings.Builder
+	for _, num := range bs.Bits {
+		b.WriteString(strconv.FormatUint(num, 2))
+	}
+	return b.String()
 }
