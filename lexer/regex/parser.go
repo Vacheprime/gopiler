@@ -107,7 +107,7 @@ func IsOptionalExpr(e Expression) bool {
 }
 
 /*
-Transfers a regex into a parse tree.
+Transforms a regex into a parse tree.
 */
 func RegexToParseTree(regex string) (*Expression, error) {
 	// Get tokens as postfix

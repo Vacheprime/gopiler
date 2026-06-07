@@ -9,19 +9,20 @@ import (
 )
 
 func main() {
-	expr, _ := re.RegexToParseTree("(ac|bc)c[0-9]")
+	expr, _ := re.RegexToParseTree(``)
 	symInfo := gl.BuildSymbolInformation(expr)
 	nfa, err := gl.BuildNFA(symInfo)
 	if err != nil {
 		panic(err)
 	}
 	dfa := pw.BuildDFA(nfa)
-	match, ok := pw.Match("acc9", dfa)
+	match, ok := pw.Match("01000000000000", dfa)
 	if ok {
 		fmt.Println(match.Match)
 	} else {
 		fmt.Println("No match!")
 	}
-	// fmt.Println(dfa.Transitions)
-	// fmt.Println(dfa.FinalStates.ToBinaryString())
+	fmt.Println(len(dfa.Transitions))
+	fmt.Println(len(nfa.Transitions))
+	fmt.Println(dfa.FinalStates.ToBinaryString())
 }

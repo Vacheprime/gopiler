@@ -1,11 +1,13 @@
-# Reserved keywords
-if
-else
-int
+# Token definitions for lexer.
+# A token is defined by a class name followed by whitespace(s)
+# and finally by the regex that defines it.
+# Regex fragments can be used as helpers and aren't considered tokens.
+# They are defined by prefixing their name with !.
 
-# Token Regexps
-letter = [a-zA-Z]
-digit = [0-9]
-letter_or_digit = {letter}|{digit}
-underscore_tail = _{letter_or_digit}+
-Identifier = {letter}{underscore_tail}*
+!word_char      [a-zA-Z0-9_]
+!digit          [0-9]
+
+keywords        if|else|for|while
+identifier      [a-zA-Z]{word_char}*
+semicolon       ;
+operator        =|+|>|<
