@@ -4,9 +4,11 @@
 # Regex fragments can be used as helpers and aren't considered tokens.
 # They are defined by prefixing their name with !.
 
+# Fragment definitions.
 !word_char      [a-zA-Z0-9_]
 !digit          [0-9]
 
+# Token definitions
 keywords        if|else|for|while
 identifier      [a-zA-Z]{word_char}*
 semicolon       ;

@@ -40,6 +40,12 @@ type definition struct {
 	defType    definitionType
 }
 
+/*
+	Parse token definitions from a file.
+	Token definitions returned do not contain fragment definitions.
+
+TODO: Instead of file path, request a Reader or ReadCloser.
+*/
 func ParseDefinitions(patternFilePath string) ([]definition, error) {
 	file, err := os.Open(patternFilePath)
 	if err != nil {
@@ -48,10 +54,12 @@ func ParseDefinitions(patternFilePath string) ([]definition, error) {
 	defer file.Close()
 	scanner := bufio.NewScanner(file)
 	classDefs := []definition{}
-	lineCount := 1
+	lineCount := 0
 	for scanner.Scan() {
+		lineCount++
 		line := scanner.Text()
-		if strings.HasPrefix(line, "#") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") || len(line) == 0 {
 			continue
 		}
 		def, err := parseDefinition(line)
@@ -74,7 +82,8 @@ func ParseDefinitions(patternFilePath string) ([]definition, error) {
 			return nil, err
 		}
 		def.regex = substituted
-		lineCount++
+		classDefs = append(classDefs, def)
+		def.regex = substituted
 	}
 	return filterDefinitionsByType(classDefs, CLASS), nil
 }
@@ -99,6 +108,7 @@ func parseDefinition(line string) (definition, *ParseError) {
 	defType := CLASS
 	if strings.HasPrefix(className, "!") {
 		defType = FRAG
+		className = className[1:]
 	}
 	return definition{className, regexDef, defType}, nil
 }
