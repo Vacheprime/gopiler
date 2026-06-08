@@ -56,7 +56,7 @@ func BuildClassifier(occurrences SymbolOccurrences) (SymbolClassifier, error) {
 				continue
 			}
 			excludedRunes := []rune{'\r', '\n'}
-			charClass := re.CharacterClass{Singulars: excludedRunes, Ranges: []re.CharacterRange{}, Excludes: true}
+			charClass := re.CharacterClass{Singulars: excludedRunes, Ranges: []re.CharacterRange{}, IsNegated: true}
 			anyCharClass = &IdCharacterRange{charClass, idx}
 			classifier.SymToId[sym] = idx
 			idx++
@@ -82,7 +82,7 @@ outer:
 		// Check for match in singulars
 		for _, v := range cri.Singulars {
 			if v == r {
-				if cri.Excludes {
+				if cri.IsNegated {
 					continue outer
 				}
 				classes = append(classes, cri.id)
@@ -93,7 +93,7 @@ outer:
 		// Check for match in ranges
 		for _, cr := range cri.Ranges {
 			if r >= cr.Start && r <= cr.End {
-				if cri.Excludes {
+				if cri.IsNegated {
 					continue outer
 				}
 				classes = append(classes, cri.id)

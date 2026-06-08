@@ -37,7 +37,7 @@ const (
 type CharacterClass struct {
 	Singulars []rune
 	Ranges    []CharacterRange
-	Excludes  bool
+	IsNegated bool
 }
 
 type CharacterRange struct {
@@ -48,13 +48,13 @@ type CharacterRange struct {
 func NewCharacterClass(tk RegexToken) (CharacterClass, error) {
 	acceptedRanges := []CharacterRange{}
 	acceptedSingulars := []rune{}
-	excludes := false
+	isNegated := false
 	for i := 1; i < len(tk.Repr)-1; i++ {
 		curr := tk.Repr[i]
 		next := tk.Repr[i+1]
 		// Handle exclude classes
 		if i == 1 && curr == '^' {
-			excludes = true
+			isNegated = true
 			continue
 		}
 		if next == '-' {
@@ -74,7 +74,7 @@ func NewCharacterClass(tk RegexToken) (CharacterClass, error) {
 		}
 		acceptedSingulars = append(acceptedSingulars, curr)
 	}
-	return CharacterClass{acceptedSingulars, acceptedRanges, excludes}, nil
+	return CharacterClass{acceptedSingulars, acceptedRanges, isNegated}, nil
 }
 
 type RegexToken struct {
