@@ -21,7 +21,7 @@ type ExpressionType int
 const (
 	SINGLE_CHAR RegexTokenType = iota
 	CHAR_CLASS
-	ANY_CHAR // Not yet implemented.
+	ANY_CHAR
 	QUANTIFIER
 	OPERATOR
 	LEFT_PARENTHESIS
@@ -37,6 +37,7 @@ const (
 type CharacterClass struct {
 	Singulars []rune
 	Ranges    []CharacterRange
+	Excludes  bool
 }
 
 type CharacterRange struct {
@@ -47,9 +48,15 @@ type CharacterRange struct {
 func NewCharacterClass(tk RegexToken) (CharacterClass, error) {
 	acceptedRanges := []CharacterRange{}
 	acceptedSingulars := []rune{}
+	excludes := false
 	for i := 1; i < len(tk.Repr)-1; i++ {
 		curr := tk.Repr[i]
 		next := tk.Repr[i+1]
+		// Handle exclude classes
+		if i == 1 && curr == '^' {
+			excludes = true
+			continue
+		}
 		if next == '-' {
 			// Check for end of range
 			if i+2 >= len(tk.Repr) {
@@ -67,7 +74,7 @@ func NewCharacterClass(tk RegexToken) (CharacterClass, error) {
 		}
 		acceptedSingulars = append(acceptedSingulars, curr)
 	}
-	return CharacterClass{acceptedSingulars, acceptedRanges}, nil
+	return CharacterClass{acceptedSingulars, acceptedRanges, excludes}, nil
 }
 
 type RegexToken struct {

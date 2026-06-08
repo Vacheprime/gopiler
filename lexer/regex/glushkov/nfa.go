@@ -2,7 +2,6 @@ package glushkov
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 
@@ -56,8 +55,8 @@ func BuildClassifier(occurrences SymbolOccurrences) (SymbolClassifier, error) {
 				classifier.SymToId[sym] = anyCharClass.id
 				continue
 			}
-			anyRange := re.CharacterRange{Start: 0, End: math.MaxInt32}
-			charClass := re.CharacterClass{Singulars: []rune{}, Ranges: []re.CharacterRange{anyRange}}
+			excludedRunes := []rune{'\r', '\n'}
+			charClass := re.CharacterClass{Singulars: excludedRunes, Ranges: []re.CharacterRange{}, Excludes: true}
 			anyCharClass = &IdCharacterRange{charClass, idx}
 			classifier.SymToId[sym] = idx
 			idx++
@@ -83,6 +82,9 @@ outer:
 		// Check for match in singulars
 		for _, v := range cri.Singulars {
 			if v == r {
+				if cri.Excludes {
+					continue outer
+				}
 				classes = append(classes, cri.id)
 				continue outer
 			}
@@ -91,10 +93,14 @@ outer:
 		// Check for match in ranges
 		for _, cr := range cri.Ranges {
 			if r >= cr.Start && r <= cr.End {
+				if cri.Excludes {
+					continue outer
+				}
 				classes = append(classes, cri.id)
 				continue outer
 			}
 		}
+		classes = append(classes, cri.id) // Not in excludes
 	}
 	return classes
 }
