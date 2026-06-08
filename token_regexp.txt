@@ -8,6 +8,9 @@
 !word_char      [a-zA-Z0-9_]
 !digit          [0-9]
 
+# Patterns to ignore
+?whitespace     \s+
+
 # Token definitions
 keywords        if|else|for|while
 identifier      [a-zA-Z]{word_char}*

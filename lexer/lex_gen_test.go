@@ -7,7 +7,7 @@ import (
 
 func TestRegexSubstitution(t *testing.T) {
 	definitions := [][]definition{
-		{definition{"digit", "[0-9]", FRAG}},
+		{definition{"digit", "[0-9]", FRAG, 0}},
 	}
 	var tests = []struct {
 		name        string
@@ -35,7 +35,7 @@ func TestRegexSubstitution(t *testing.T) {
 
 func TestRegexSubstitutionInvalid(t *testing.T) {
 	definitions := [][]definition{
-		{definition{"digit", "[0-9]", FRAG}},
+		{definition{"digit", "[0-9]", FRAG, 0}},
 	}
 	var tests = []struct {
 		name        string

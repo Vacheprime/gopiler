@@ -18,6 +18,7 @@ const (
 	ErrUnclosedRePlaceholder    string = "Regex placeholder is never closed."
 )
 
+/* Parsing related errors. */
 type ParseError struct {
 	Message string
 	Line    int
@@ -34,15 +35,24 @@ const (
 	FRAG
 )
 
+type instructionType int
+
+const (
+	LEX instructionType = iota
+	IGNORE
+)
+
+/* Encompasses token definition information. */
 type definition struct {
 	identifier string
 	regex      string
 	defType    definitionType
+	insType    instructionType
 }
 
 /*
 	Parse token definitions from a file.
-	Token definitions returned do not contain fragment definitions.
+	Token definitions returned do not contain the fragment definitions.
 
 TODO: Instead of file path, request a Reader or ReadCloser.
 */
@@ -88,6 +98,7 @@ func ParseDefinitions(patternFilePath string) ([]definition, error) {
 	return filterDefinitionsByType(classDefs, CLASS), nil
 }
 
+/* Filters definitions by the definition type. */
 func filterDefinitionsByType(defs []definition, defType definitionType) []definition {
 	filtered := make([]definition, 0, len(defs))
 	for _, d := range defs {
@@ -98,6 +109,7 @@ func filterDefinitionsByType(defs []definition, defType definitionType) []defini
 	return filtered
 }
 
+/* Parses a definition from a line of input. */
 func parseDefinition(line string) (definition, *ParseError) {
 	components := strings.Fields(line)
 	if len(components) != 2 {
@@ -106,13 +118,21 @@ func parseDefinition(line string) (definition, *ParseError) {
 	className := components[0]
 	regexDef := components[1]
 	defType := CLASS
-	if strings.HasPrefix(className, "!") {
+	insType := LEX
+	switch className[0] {
+	case '!':
 		defType = FRAG
 		className = className[1:]
+	case '?':
+		insType = IGNORE
+		className = className[1:]
 	}
-	return definition{className, regexDef, defType}, nil
+	return definition{className, regexDef, defType, insType}, nil
 }
 
+/*
+Given a regex and a slice of regex definitions, this function replaces the placeholders of a regex with their appropriate definitions.
+*/
 func substituteRegexPlaceholders(regex string, classDefs []definition) (string, *ParseError) {
 	chars := []rune(regex)
 	var substitutedRegexBuilder strings.Builder
@@ -151,6 +171,7 @@ func substituteRegexPlaceholders(regex string, classDefs []definition) (string, 
 	return substitutedRegexBuilder.String(), nil
 }
 
+/* Parses a regex placeholder, returning the placeholder name and the number of characters consumed. */
 func parseRegexPlaceholder(nextChars []rune) (string, int, *ParseError) {
 	var identifierBuilder strings.Builder
 	charCount := 0
