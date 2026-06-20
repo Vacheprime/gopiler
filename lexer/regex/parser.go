@@ -2,21 +2,36 @@ package regex
 
 import (
 	"errors"
+	"slices"
+	"strconv"
 
 	gp "github.com/Vacheprime/gopiler"
 )
 
 var (
-	ErrUnmatchedParenthesis = errors.New("right parenthesis unmatched.")
-	ErrUnmatchedBracket     = errors.New("left bracket of character class unmatched.")
-	ErrInvalidCharClass     = errors.New("invalid character class")
-	ErrMissingOperands      = errors.New("missing operand(s) in expression")
-	ErrUnknownToken         = errors.New("unknown token encountered while building AST")
-	ErrMalformedRegex       = errors.New("regex is malformed and could not be parsed")
+	ErrUnmatchedParenthesis  = errors.New("right parenthesis unmatched.")
+	ErrUnmatchedBracket      = errors.New("left bracket of character class unmatched.")
+	ErrInvalidCharClass      = errors.New("invalid character class")
+	ErrMissingOperands       = errors.New("missing operand(s) in expression")
+	ErrUnknownToken          = errors.New("unknown token encountered while building AST")
+	ErrMalformedRegex        = errors.New("regex is malformed and could not be parsed")
+	ErrInvalidEscapeSequence = errors.New("regex contains an invalid escape sequence")
 )
 
 type RegexTokenType int
 type ExpressionType int
+
+var VALID_ESCAPE_CHARS []rune = []rune{
+	'[',
+	']',
+	'(',
+	')',
+}
+
+var VALID_METACLASSES []rune = []rune{
+	'w', // Word character [a-zA-Z0-9_]
+	's', // Whitespace
+}
 
 const (
 	SINGLE_CHAR RegexTokenType = iota
@@ -105,7 +120,7 @@ func IsOptionalExpr(e Expression) bool {
 		// Atomic expressions aren't considered optional
 	case UNARY_EXPR:
 		if e.Operator == '*' || e.Operator == '?' {
-			isOptional = true // Don't require any so not optional
+			isOptional = true // Don't require any so optional
 		}
 	case BINARY_EXPR:
 		return IsOptionalExpr(*e.LExpr) && IsOptionalExpr(*e.RExpr)
@@ -289,11 +304,62 @@ func tokenizeRegex(regex string) ([]RegexToken, error) {
 			i += charsRead
 		case c == '.':
 			tokens = append(tokens, RegexToken{ANY_CHAR, []rune{c}})
+		case c == '\\':
+			c, isMeta, consumed, err := parseEscapeSequence(chars[i:])
+			if err != nil {
+				return nil, err
+			}
+			if isMeta {
+
+				// Process meta class
+			} else {
+				tokens = append(tokens, RegexToken{SINGLE_CHAR, []rune{c}})
+			}
+			// Skip consumed
+			i += consumed - 1
 		default:
 			tokens = append(tokens, RegexToken{SINGLE_CHAR, []rune{c}})
 		}
 	}
 	return tokens, nil
+}
+
+/*
+Parses an escape sequence given a slice of runes.
+
+	This method assumes that the first character in the slice
+	is a backslash.
+*/
+func parseEscapeSequence(chars []rune) (char rune, isMetaClass bool, consumed int, err error) {
+	if len(chars) <= 1 {
+		return 0, false, 0, ErrInvalidEscapeSequence
+	}
+	next := chars[1]
+	found := slices.Index(VALID_ESCAPE_CHARS, next)
+	if found > -1 {
+		// Treat as single char
+		return VALID_ESCAPE_CHARS[found], false, 2, nil
+	}
+	found = slices.Index(VALID_METACLASSES, next)
+	if found > -1 {
+		// Treat as meta class
+		return VALID_METACLASSES[found], true, 2, nil
+	}
+	// Attempt to parse unicode escape
+	v, _, t, err := strconv.UnquoteChar(string(chars), 0)
+	if err != nil {
+		return 0, false, 0, ErrInvalidEscapeSequence
+	}
+	return v, false, len(chars) - len(t), nil
+}
+
+func buildMetaClass(char rune) (*RegexToken, error) {
+	switch char {
+	case 'w':
+		return &RegexToken{CHAR_CLASS, []rune("[a-zA-Z0-9_]")}, nil
+	case 's':
+		return &RegexToken{CHAR_CLASS, []rune("")}
+	}
 }
 
 func tokenizeCharClass(i int, chars *[]rune) (*RegexToken, int, error) {
