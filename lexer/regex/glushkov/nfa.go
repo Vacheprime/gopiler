@@ -17,92 +17,82 @@ type IdCharacterRange struct {
 }
 
 type SymbolClassifier struct {
-	Singulars map[rune]int
-	Classes   []IdCharacterRange
-	SymToId   map[Symbol]int
+	Singulars  map[rune]int
+	Classes    []IdCharacterRange
+	SymToId    map[Symbol]int
+	symIdCount int
 }
 
-/* Returns the total number of character classes. */
+/* Total returns the total number of character classes. */
 func (sc *SymbolClassifier) Total() int {
 	return len(sc.Singulars) + len(sc.Classes)
 }
 
-func BuildClassifier(occurrences SymbolOccurrences) (SymbolClassifier, error) {
-	classifier := SymbolClassifier{make(map[rune]int), []IdCharacterRange{}, map[Symbol]int{}}
-	idx := 0
-	var anyCharClass *IdCharacterRange
-	for _, sym := range occurrences {
-		tk := sym.Token
-		switch tk.Class {
-		case re.SINGLE_CHAR:
-			id, ok := classifier.Singulars[tk.Repr[0]]
-			if !ok {
-				classifier.Singulars[tk.Repr[0]] = idx
-				id = idx
-				idx++
-			}
-			classifier.SymToId[sym] = id
-		case re.CHAR_CLASS:
-			charClass, err := re.NewCharacterClass(*tk)
-			if err != nil {
-				return SymbolClassifier{}, re.ErrInvalidCharClass
-			}
-			classifier.SymToId[sym] = idx
-			classifier.Classes = append(classifier.Classes, IdCharacterRange{charClass, idx})
-			idx++
-		case re.ANY_CHAR:
-			if anyCharClass != nil {
-				classifier.SymToId[sym] = anyCharClass.id
-				continue
-			}
-			excludedRunes := []rune{'\r', '\n'}
-			charClass := re.CharacterClass{Singulars: excludedRunes, Ranges: []re.CharacterRange{}, IsNegated: true}
-			anyCharClass = &IdCharacterRange{charClass, idx}
-			classifier.SymToId[sym] = idx
-			idx++
+func (sc *SymbolClassifier) getNextSymId() int {
+	curr := sc.symIdCount
+	sc.symIdCount++
+	return curr
+}
+
+func (sc *SymbolClassifier) addSymbol(sym Symbol) (err error) {
+	token := sym.Token
+	switch token.Class {
+	case re.SINGLE_CHAR:
+		existingId, ok := sc.Singulars[token.Repr[0]]
+		if !ok {
+			existingId = sc.getNextSymId()
+			sc.Singulars[token.Repr[0]] = existingId
 		}
+		sc.SymToId[sym] = existingId
+	case re.CHAR_CLASS, re.META_CHAR:
+		charClass, err := re.NewCharacterClass(*token)
+		if err != nil {
+			return err
+		}
+		existingId := -1
+		for _, cc := range sc.Classes {
+			if charClass.Equals(cc.CharacterClass) {
+				existingId = cc.id
+				break
+			}
+		}
+		if existingId == -1 {
+			existingId = sc.getNextSymId()
+			sc.Classes = append(sc.Classes, IdCharacterRange{CharacterClass: charClass, id: existingId})
+		}
+		sc.SymToId[sym] = existingId
 	}
-	// Append any character class at the end for least priority
-	if anyCharClass != nil {
-		classifier.Classes = append(classifier.Classes, *anyCharClass)
+	return nil
+}
+
+// BuildClassifier creates a classifier based on symbol occurrences.
+func BuildClassifier(occurrences SymbolOccurrences) (SymbolClassifier, error) {
+	classifier := SymbolClassifier{
+		Singulars: map[rune]int{},
+		Classes:   []IdCharacterRange{},
+		SymToId:   map[Symbol]int{},
+	}
+	for _, sym := range occurrences {
+		err := classifier.addSymbol(sym)
+		if err != nil {
+			return SymbolClassifier{}, err
+		}
 	}
 	return classifier, nil
 }
 
-func (sc *SymbolClassifier) Classify(r rune) []int {
-	classes := []int{}
-	// Check if rune is a part of singular (highest priority)
+func (sc *SymbolClassifier) Classify(r rune) (symbolIds []int) {
+	symbolIds = []int{}
 	id, ok := sc.Singulars[r]
 	if ok {
-		classes = append(classes, id)
+		symbolIds = append(symbolIds, id)
 	}
-	// Check if rune is a part of any one or more character classes (second priority)
-outer:
-	for _, cri := range sc.Classes {
-		// Check for match in singulars
-		for _, v := range cri.Singulars {
-			if v == r {
-				if cri.IsNegated {
-					continue outer
-				}
-				classes = append(classes, cri.id)
-				continue outer
-			}
+	for _, charSet := range sc.Classes {
+		if charSet.Matches(r) {
+			symbolIds = append(symbolIds, charSet.id)
 		}
-
-		// Check for match in ranges
-		for _, cr := range cri.Ranges {
-			if r >= cr.Start && r <= cr.End {
-				if cri.IsNegated {
-					continue outer
-				}
-				classes = append(classes, cri.id)
-				continue outer
-			}
-		}
-		classes = append(classes, cri.id) // Not in excludes
 	}
-	return classes
+	return symbolIds
 }
 
 // Attempt to implement a table-based NFA.
