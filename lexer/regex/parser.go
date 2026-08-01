@@ -32,6 +32,8 @@ var VALID_METACLASSES []rune = []rune{
 	'W',
 	's', // Whitespace
 	'S',
+	'd',
+	'D',
 	'.', // Any char except newline [^\n\r]
 }
 
@@ -91,7 +93,7 @@ func (cc1 *CharacterClass) Equals(cc2 CharacterClass) (isEqual bool) {
 
 func (cc *CharacterClass) Matches(r rune) (matches bool) {
 	isInAnyRegular := len(cc.Singulars) == 0 && len(cc.Ranges) == 0
-	isOutsideAllNegated := true
+	isOutsideAllNegated := (len(cc.NegatedSingulars) != 0 || len(cc.NegatedRanges) != 0) || cc.IsNegated
 	// Check if in any regular
 	for _, sing := range cc.Singulars {
 		if sing.Char == r {
@@ -539,7 +541,7 @@ func getMetaClass(char rune) (CharacterClass, error) {
 			{Char: '_'},
 		}
 		if isNegated {
-			return CharacterClass{NegatedRanges: ranges, NegatedSingulars: singulars}, nil
+			return CharacterClass{NegatedRanges: ranges, NegatedSingulars: singulars, IsNegated: isNegated}, nil
 		}
 		return CharacterClass{Ranges: ranges, Singulars: singulars}, nil
 	case 's', 'S':
@@ -552,15 +554,23 @@ func getMetaClass(char rune) (CharacterClass, error) {
 			{Char: ' '},
 		}
 		if isNegated {
-			return CharacterClass{NegatedSingulars: singulars}, nil
+			return CharacterClass{NegatedSingulars: singulars, IsNegated: isNegated}, nil
 		}
 		return CharacterClass{Singulars: singulars}, nil
+	case 'd', 'D':
+		ranges := []CharacterRange{
+			{Start: '0', End: '9'},
+		}
+		if isNegated {
+			return CharacterClass{NegatedRanges: ranges, IsNegated: isNegated}, nil
+		}
+		return CharacterClass{Ranges: ranges}, nil
 	case '.':
 		singulars := []Singular{
 			{Char: '\n'},
 			{Char: '\r'},
 		}
-		return CharacterClass{NegatedSingulars: singulars}, nil
+		return CharacterClass{NegatedSingulars: singulars, IsNegated: true}, nil
 	}
 	return CharacterClass{}, ErrUnknownMetaClass
 }
