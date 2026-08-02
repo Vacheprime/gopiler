@@ -4,13 +4,13 @@ type ReMatch struct {
 	StartIndex int
 	EndIndex   int
 	Match      string
-	Label      string
+	Labels     []string
 }
 
 func Match(search string, dfa DFA) (match ReMatch, hasMatch bool) {
 	chars := []rune(search)
 	state := 0
-	latestMatch := ReMatch{0, -1, "", ""}
+	latestMatch := ReMatch{0, -1, "", nil}
 	if dfa.FinalStates.Bits[0]&1<<0 != 0 {
 		latestMatch.EndIndex = 0
 	}
@@ -33,7 +33,7 @@ func Match(search string, dfa DFA) (match ReMatch, hasMatch bool) {
 		// Found result
 		if dfa.FinalStates.IsSet(uint(state)) {
 			latestMatch.EndIndex = i
-			latestMatch.Label = dfa.FinalStateLabels[state]
+			latestMatch.Labels = dfa.FinalStateLabels[state]
 		}
 	}
 	if latestMatch.EndIndex != -1 {
