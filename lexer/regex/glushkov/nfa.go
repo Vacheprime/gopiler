@@ -2,6 +2,7 @@ package glushkov
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -95,18 +96,28 @@ func (sc *SymbolClassifier) Classify(r rune) (symbolIds []int) {
 	return symbolIds
 }
 
+type LabelledRegexTree struct {
+	Root  *re.Expression
+	Label string
+}
+
 // Attempt to implement a table-based NFA.
 // The NFA would store a table array where the
 // row is the state, column the input char class, and the value is the set of states.
+// TODO: The NFA struct could have an additional field. A map that links a final state bit pos
+// TODO: to the label that describes which regex is producing the match. Since its an NFA, one final state
+// TODO: would equate to one label.
 type NFA struct {
-	Classifier  SymbolClassifier
-	Transitions [][]gp.BitSet
-	FinalStates gp.BitSet
+	Classifier       SymbolClassifier
+	Transitions      [][]gp.BitSet
+	FinalStates      gp.BitSet
+	FinalStateLabels map[int]string
 }
 
 type Symbol struct {
 	SymbolId int
 	Token    *re.RegexToken
+	Label    string
 }
 
 type SymbolPair struct {
@@ -122,15 +133,74 @@ type SymbolInformation struct {
 	AcceptsEmpty bool
 }
 
+// ContainsFinalSymbol checks if a given symbol is in the FinalSymbols list.
+// This method ignores the label field.
+func (si *SymbolInformation) ContainsFinalSymbol(sym Symbol) bool {
+	return slices.ContainsFunc(si.FinalSymbols.Items(), func(s Symbol) bool {
+		return s.Token == sym.Token
+	})
+}
+
+// GetFinalSymbolLabel returns the label of the final symbol given a symbol.
+// The symbol given MUST be inside the final symbol list.
+func (si *SymbolInformation) GetFinalSymbolLabel(sym Symbol) string {
+	finalSymbols := si.FinalSymbols.Items()
+	idx := slices.IndexFunc(finalSymbols, func(s Symbol) bool {
+		return s.Token == sym.Token
+	})
+	return finalSymbols[idx].Label
+}
+
 func AddSymbolToOccurrences(tk *re.RegexToken, occurrences SymbolOccurrences) Symbol {
-	s := Symbol{len(occurrences) + 1, tk}
+	s := Symbol{len(occurrences) + 1, tk, ""}
 	occurrences[tk] = s
 	return s
 }
 
-func BuildSymbolInformation(reRootExpr *re.Expression) SymbolInformation {
+func BuildSymbolInformation(rootExprs []LabelledRegexTree) SymbolInformation {
 	symPairs := gp.NewSet[SymbolPair]()
-	return determineSymbolPairs(reRootExpr, SymbolInformation{SymbolPairs: &symPairs, Occurrences: map[*re.RegexToken]Symbol{}})
+	symOccurrences := map[*re.RegexToken]Symbol{}
+	symInfo := SymbolInformation{SymbolPairs: &symPairs, Occurrences: symOccurrences}
+	for _, labelledTree := range rootExprs {
+		// Create new symbol information to have a clean list of start and final symbol for this tree
+		newInfo := SymbolInformation{SymbolPairs: &symPairs, Occurrences: symInfo.Occurrences}
+		newInfo = determineSymbolPairs(labelledTree.Root, newInfo)
+
+		// Attach label to final states
+		finalSymbols := newInfo.FinalSymbols.Items()
+		for i := range finalSymbols {
+			finalSymbols[i].Label = labelledTree.Label
+		}
+
+		// Handle empty
+		if symInfo.AcceptsEmpty {
+			newInfo.AcceptsEmpty = true
+		}
+
+		// Add back initial start and final symbols as well as
+		newInfo.StartSymbols.Add(symInfo.StartSymbols.Items()...)
+		newInfo.FinalSymbols.Add(symInfo.FinalSymbols.Items()...)
+
+		symInfo = newInfo
+	}
+	return symInfo
+}
+
+// Works! Since we now know the final states of each individual regex that compose the whole regex,
+// We can attach the label to those final states which will then be passed on to the nfa.
+func TestBuildManySymInfo(rootExprs []*re.Expression) SymbolInformation {
+	symPairs := gp.NewSet[SymbolPair]()
+	symOccurrences := map[*re.RegexToken]Symbol{}
+	symInfo := SymbolInformation{SymbolPairs: &symPairs, Occurrences: symOccurrences}
+	for _, expr := range rootExprs {
+		newInfo := determineSymbolPairs(expr, symInfo)
+		// Use new info
+		if symInfo.AcceptsEmpty {
+			newInfo.AcceptsEmpty = true
+		}
+		symInfo = newInfo // Override
+	}
+	return symInfo
 }
 
 func determineSymbolPairs(expr *re.Expression, symInfo SymbolInformation) SymbolInformation {
@@ -233,6 +303,7 @@ func BuildNFA(symInfo SymbolInformation) (NFA, error) {
 	totalClassIds := classifier.Total()
 	symToState := map[Symbol]int{}
 	finalStates := gp.NewBitSet(uint(totalStates))
+	finalStateLabels := map[int]string{}
 	// Create all nodes
 	transitionIdx := 1
 	transitions := make([][]gp.BitSet, totalStates)
@@ -240,8 +311,9 @@ func BuildNFA(symInfo SymbolInformation) (NFA, error) {
 	for _, sym := range symInfo.Occurrences {
 		symToState[sym] = transitionIdx
 		transitions[transitionIdx] = make([]gp.BitSet, totalClassIds)
-		// Set final states
-		if symInfo.FinalSymbols.Contains(sym) {
+		// Set final states and attach label
+		if symInfo.ContainsFinalSymbol(sym) {
+			finalStateLabels[transitionIdx] = symInfo.GetFinalSymbolLabel(sym)
 			finalStates.Set(uint(transitionIdx))
 		}
 		transitionIdx++
@@ -284,7 +356,7 @@ func BuildNFA(symInfo SymbolInformation) (NFA, error) {
 			bitSet.Set(uint(stateIdx))
 		}
 	}
-	return NFA{classifier, transitions, finalStates}, nil
+	return NFA{classifier, transitions, finalStates, finalStateLabels}, nil
 }
 
 func filterPairsByStart(sym Symbol, pairs []SymbolPair) []SymbolPair {

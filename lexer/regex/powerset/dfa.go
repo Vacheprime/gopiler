@@ -8,9 +8,12 @@ import (
 )
 
 type DFA struct {
-	Classifier  gl.SymbolClassifier
-	Transitions [][]int // A transition only has one next state
-	FinalStates gp.BitSet
+	Classifier       gl.SymbolClassifier
+	Transitions      [][]int // A transition only has one next state
+	FinalStates      gp.BitSet
+	FinalStateLabels map[int]string
+	// Imagine a map that associates a final state bit position to a label given during construction
+	// Upon match, the label is retrieved and returned along with the match.
 }
 
 type DFAState struct {
@@ -77,9 +80,16 @@ func BuildDFA(nfa gl.NFA) DFA {
 		}
 	}
 
+	// While building the dfa final states, the label of the regex that produced the match can be
+	// found by finding the label in the nfa
 	dfaFinalStates := gp.NewBitSet(uint(len(dfaTransitions)))
+	dfaFinalStateLabels := map[int]string{}
 	for _, dfaState := range annotatedTransitions {
-		if nfa.FinalStates.Overlaps(dfaState.nfaStates) {
+		overlapPositions := nfa.FinalStates.OverlapsPos(dfaState.nfaStates)
+		if len(overlapPositions) != 0 {
+			// Due to how the dfa is constructed, the final dfa state lands on a single nfa final state
+			pos := int(overlapPositions[0])
+			dfaFinalStateLabels[dfaState.Pos] = nfa.FinalStateLabels[pos]
 			dfaFinalStates.Set(uint(dfaState.Pos))
 		}
 	}
@@ -88,6 +98,7 @@ func BuildDFA(nfa gl.NFA) DFA {
 	}
 	dfa.Transitions = dfaTransitions
 	dfa.FinalStates = dfaFinalStates
+	dfa.FinalStateLabels = dfaFinalStateLabels
 	return dfa
 }
 
