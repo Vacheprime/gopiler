@@ -130,16 +130,18 @@ func NegateCharacterSet(cs CharacterSet) (negatedSet CharacterSet) {
 	for _, cr := range cs.Ranges {
 		intervalEnd := cr.Start - 1
 		if intervalEnd < intervalStart {
+			intervalStart = int32(math.Min(unicode.MaxRune, float64(cr.End+1)))
 			continue // Skip, no interval possible
 		}
 		negatedRange := CharacterRange{Start: intervalStart, End: intervalEnd}
 		negatedSet.Ranges = append(negatedSet.Ranges, negatedRange)
 
-		// Handle max size
-		if cr.End == math.MaxInt32 {
-			break // There cannot be a next interval
-		}
-		intervalStart = cr.End + 1
+		intervalStart = int32(math.Min(unicode.MaxRune, float64(cr.End+1)))
+	}
+	// Add last range which includes the rest of the characters
+	if intervalStart != unicode.MaxRune {
+		lastRange := CharacterRange{Start: intervalStart, End: unicode.MaxRune}
+		negatedSet.Ranges = append(negatedSet.Ranges, lastRange)
 	}
 	return negatedSet
 }
