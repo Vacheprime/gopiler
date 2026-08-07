@@ -13,7 +13,7 @@ import (
 type SymbolOccurrences map[*re.RegexToken]Symbol
 
 type IdCharacterRange struct {
-	re.CharacterClass
+	re.CharacterSet
 	id int
 }
 
@@ -35,6 +35,8 @@ func (sc *SymbolClassifier) getNextSymId() int {
 	return curr
 }
 
+// TODO: To avoid non-determinism in the final DFA, the classifier must be built in a way that
+// TODO: one input character corresponds to a single character ID.
 func (sc *SymbolClassifier) addSymbol(sym Symbol) (err error) {
 	token := sym.Token
 	switch token.Class {
@@ -46,20 +48,20 @@ func (sc *SymbolClassifier) addSymbol(sym Symbol) (err error) {
 		}
 		sc.SymToId[sym] = existingId
 	case re.CHAR_CLASS, re.META_CHAR:
-		charClass, err := re.NewCharacterClass(*token)
+		charClass, err := re.NewCharacterSet(*token)
 		if err != nil {
 			return err
 		}
 		existingId := -1
 		for _, cc := range sc.Classes {
-			if charClass.Equals(cc.CharacterClass) {
+			if charClass.Equals(cc.CharacterSet) {
 				existingId = cc.id
 				break
 			}
 		}
 		if existingId == -1 {
 			existingId = sc.getNextSymId()
-			sc.Classes = append(sc.Classes, IdCharacterRange{CharacterClass: charClass, id: existingId})
+			sc.Classes = append(sc.Classes, IdCharacterRange{CharacterSet: charClass, id: existingId})
 		}
 		sc.SymToId[sym] = existingId
 	}
@@ -182,23 +184,6 @@ func BuildSymbolInformation(rootExprs []LabelledRegexTree) SymbolInformation {
 		newInfo.FinalSymbols.Add(symInfo.FinalSymbols.Items()...)
 
 		symInfo = newInfo
-	}
-	return symInfo
-}
-
-// Works! Since we now know the final states of each individual regex that compose the whole regex,
-// We can attach the label to those final states which will then be passed on to the nfa.
-func TestBuildManySymInfo(rootExprs []*re.Expression) SymbolInformation {
-	symPairs := gp.NewSet[SymbolPair]()
-	symOccurrences := map[*re.RegexToken]Symbol{}
-	symInfo := SymbolInformation{SymbolPairs: &symPairs, Occurrences: symOccurrences}
-	for _, expr := range rootExprs {
-		newInfo := determineSymbolPairs(expr, symInfo)
-		// Use new info
-		if symInfo.AcceptsEmpty {
-			newInfo.AcceptsEmpty = true
-		}
-		symInfo = newInfo // Override
 	}
 	return symInfo
 }

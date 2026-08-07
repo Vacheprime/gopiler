@@ -2,6 +2,7 @@ package regex
 
 import (
 	"errors"
+	"math"
 	"slices"
 	"strconv"
 	"unicode"
@@ -57,126 +58,133 @@ const (
 	ATOMIC
 )
 
-type CharacterClass struct {
-	Singulars        []Singular
-	Ranges           []CharacterRange
-	NegatedSingulars []Singular
-	NegatedRanges    []CharacterRange
-	IsNegated        bool
+// CharacterRange represents a range of accepted characters.
+type CharacterRange struct {
+	Start rune
+	End   rune
+}
+
+// CharacterSet represents a regex character set.
+// It is comprised of a list of character ranges that constitute the
+// set of characters that matches the set.
+type CharacterSet struct {
+	Ranges []CharacterRange
+}
+
+// BuildCharacterSet creates a new character set from a slice of character ranges.
+// This method is the preferred method to use when building a set
+// since it simplifies and merges ranges to obtain the simplest set
+// possible and it also keeps all ranges sorted by start value.
+func BuildCharacterSet(ranges []CharacterRange) CharacterSet {
+	if len(ranges) == 0 || len(ranges) == 1 {
+		return CharacterSet{Ranges: ranges}
+	}
+
+	// Sort ranges by start value
+	slices.SortFunc(ranges, func(c1 CharacterRange, c2 CharacterRange) int {
+		return int(c1.Start) - int(c2.Start)
+	})
+
+	// Merge ranges
+	simplifiedRanges := []CharacterRange{ranges[0]}
+	for _, currentRange := range ranges[1:] {
+		latestSimpRange := &simplifiedRanges[len(simplifiedRanges)-1]
+
+		// Handle distinct ranges (no overlap and not adjacent)
+		if currentRange.Start-1 > latestSimpRange.End {
+			simplifiedRanges = append(simplifiedRanges, currentRange)
+			continue
+		}
+
+		// Handle total overlap
+		if currentRange.End <= latestSimpRange.End {
+			continue
+		}
+
+		// Handle partial overlap by extending the range
+		latestSimpRange.End = currentRange.End
+	}
+	return CharacterSet{Ranges: simplifiedRanges}
 }
 
 // Equals checks if a CharacterClass is equal to this CharacterClass.
-func (cc1 *CharacterClass) Equals(cc2 CharacterClass) (isEqual bool) {
-	if len(cc1.Singulars) != len(cc2.Singulars) ||
-		len(cc1.Ranges) != len(cc2.Ranges) {
+func (cc1 *CharacterSet) Equals(cc2 CharacterSet) (isEqual bool) {
+	if len(cc1.Ranges) != len(cc2.Ranges) {
 		return false
 	}
-	// Need to use ContainsFunc because singulars and ranges may be located
+	// Need to loop over because ranges may be located
 	// at different indexes in both arrays.
-	for _, s := range cc1.Singulars {
-		if !slices.ContainsFunc(cc2.Singulars, func(s2 Singular) bool {
-			return s == s2
-		}) {
-			return false
-		}
-	}
-
-	for _, r := range cc1.Ranges {
-		if !slices.ContainsFunc(cc2.Ranges, func(r2 CharacterRange) bool {
-			return r == r2
-		}) {
+	for _, s := range cc1.Ranges {
+		if !slices.Contains(cc2.Ranges, s) {
 			return false
 		}
 	}
 	return true
 }
 
-func (cc *CharacterClass) Matches(r rune) (matches bool) {
-	isInAnyRegular := len(cc.Singulars) == 0 && len(cc.Ranges) == 0
-	isOutsideAllNegated := (len(cc.NegatedSingulars) != 0 || len(cc.NegatedRanges) != 0) || cc.IsNegated
-	// Check if in any regular
-	for _, sing := range cc.Singulars {
-		if sing.Char == r {
-			isInAnyRegular = true
-			break
+// NegateCharacterSet computes the negated set of the set given.
+// This method assumes that the character ranges of the set given are sorted.
+func NegateCharacterSet(cs CharacterSet) (negatedSet CharacterSet) {
+	var intervalStart int32 = 0
+	negatedSet = CharacterSet{[]CharacterRange{}}
+	for _, cr := range cs.Ranges {
+		intervalEnd := cr.Start - 1
+		if intervalEnd < intervalStart {
+			continue // Skip, no interval possible
 		}
-	}
-	if !isInAnyRegular {
-		for _, cr := range cc.Ranges {
-			if cr.Start <= r && cr.End >= r {
-				isInAnyRegular = true
-				break
-			}
+		negatedRange := CharacterRange{Start: intervalStart, End: intervalEnd}
+		negatedSet.Ranges = append(negatedSet.Ranges, negatedRange)
+
+		// Handle max size
+		if cr.End == math.MaxInt32 {
+			break // There cannot be a next interval
 		}
+		intervalStart = cr.End + 1
 	}
-	// Check if in any negated
-	for _, sing := range cc.NegatedSingulars {
-		if sing.Char == r {
-			isOutsideAllNegated = false
-			break
-		}
-	}
-	for _, cr := range cc.NegatedRanges {
-		if cr.Start <= r && cr.End >= r {
-			isOutsideAllNegated = false
-			break
-		}
-	}
-	if !cc.IsNegated {
-		return isInAnyRegular || isOutsideAllNegated
-	}
-	return isInAnyRegular && isOutsideAllNegated
+	return negatedSet
 }
 
-type CharacterRange struct {
-	Start rune
-	End   rune
+// Matches determines whether a rune r matches the CharacterSet.
+func (cc *CharacterSet) Matches(r rune) (matches bool) {
+	for _, cs := range cc.Ranges {
+		if cs.Start <= r && r <= cs.End {
+			return true
+		}
+	}
+	return false
 }
 
-type Singular struct {
-	Char rune
-}
-
-func NewCharacterClass(tk RegexToken) (CharacterClass, error) {
+// NewCharacterSet creates a new character set from a CHAR_CLASS or META_CLASS regex token.
+func NewCharacterSet(tk RegexToken) (CharacterSet, error) {
 	// Handle meta characters
 	if tk.Class == META_CHAR {
 		return getMetaClass(tk.Repr[0])
 	}
-	charClass := CharacterClass{
-		Ranges:           []CharacterRange{},
-		Singulars:        []Singular{},
-		NegatedSingulars: []Singular{},
-		NegatedRanges:    []CharacterRange{},
-	}
-	embeddedMetaClasses := []CharacterClass{}
+	ranges := []CharacterRange{}
 	isNegated := false
+
 	for i := 1; i < len(tk.Repr)-1; i++ {
 		curr := tk.Repr[i]
 		next := tk.Repr[i+1]
 		// Handle negated classes
 		if i == 1 && curr == '^' {
 			isNegated = true
-			charClass.IsNegated = true
 			continue
 		}
 		if curr == '\\' {
 			c, isMeta, consumed, err := parseEscapeSequence(tk.Repr[i:])
 			if err != nil {
-				return CharacterClass{}, ErrInvalidEscapeSequence
+				return CharacterSet{}, ErrInvalidEscapeSequence
 			}
 			if isMeta {
 				metaClass, err := getMetaClass(c)
 				if err != nil {
-					return CharacterClass{}, err
+					return CharacterSet{}, err
 				}
-				embeddedMetaClasses = append(embeddedMetaClasses, metaClass)
+				ranges = append(ranges, metaClass.Ranges...)
 			} else {
-				sing := Singular{Char: c}
-				if isNegated {
-					charClass.NegatedSingulars = append(charClass.NegatedSingulars, sing)
-				} else {
-					charClass.Singulars = append(charClass.NegatedSingulars, sing)
-				}
+				sing := CharacterRange{Start: c, End: c}
+				ranges = append(ranges, sing)
 			}
 			i += consumed - 1
 			continue
@@ -184,87 +192,27 @@ func NewCharacterClass(tk RegexToken) (CharacterClass, error) {
 		if next == '-' {
 			// Check for end of range
 			if i+2 >= len(tk.Repr) {
-				return CharacterClass{}, ErrInvalidCharClass
+				return CharacterSet{}, ErrInvalidCharClass
 			}
 			// Process the end of range
 			end := tk.Repr[i+2]
 			if end < curr {
-				return CharacterClass{}, ErrInvalidCharClass
+				return CharacterSet{}, ErrInvalidCharClass
 			}
 			// Append range
 			cr := CharacterRange{curr, end}
-			if isNegated {
-				charClass.NegatedRanges = append(charClass.NegatedRanges, cr)
-			} else {
-				charClass.Ranges = append(charClass.Ranges, cr)
-			}
+			ranges = append(ranges, cr)
 			i += 2 // Skip 2 to land after char range
 			continue
 		}
-		sing := Singular{Char: curr}
-		if isNegated {
-			charClass.NegatedSingulars = append(charClass.NegatedSingulars, sing)
-		} else {
-			charClass.Singulars = append(charClass.Singulars, sing)
-		}
+		sing := CharacterRange{Start: curr, End: curr}
+		ranges = append(ranges, sing)
 	}
-	// Process the metaclasses
-	for _, metaClass := range embeddedMetaClasses {
-		// Regular singulars
-		for _, sing := range metaClass.Singulars {
-			// Check if already present
-			if slices.ContainsFunc(charClass.Singulars, func(s Singular) bool {
-				return s.Char == sing.Char
-			}) {
-				continue
-			}
-			if isNegated {
-				charClass.NegatedSingulars = append(charClass.NegatedSingulars, sing)
-			} else {
-				charClass.Singulars = append(charClass.Singulars, sing)
-			}
-		}
-		// Regular Ranges
-		for _, metaRange := range metaClass.Ranges {
-			if slices.ContainsFunc(charClass.Ranges, func(r CharacterRange) bool {
-				return r.Start == metaRange.Start && r.End == metaRange.End
-			}) {
-				continue
-			}
-			if isNegated {
-				charClass.NegatedRanges = append(charClass.NegatedRanges, metaRange)
-			} else {
-				charClass.Ranges = append(charClass.Ranges, metaRange)
-			}
-		}
-		// Negated singulars
-		for _, sing := range metaClass.NegatedSingulars {
-			if slices.ContainsFunc(charClass.NegatedSingulars, func(s Singular) bool {
-				return s.Char == sing.Char
-			}) {
-				continue
-			}
-			if isNegated {
-				charClass.Singulars = append(charClass.Singulars, sing)
-			} else {
-				charClass.NegatedSingulars = append(charClass.NegatedSingulars, sing)
-			}
-		}
-		// Negated ranges
-		for _, metaRange := range metaClass.NegatedRanges {
-			if slices.ContainsFunc(charClass.NegatedRanges, func(r CharacterRange) bool {
-				return r.Start == metaRange.Start && r.End == metaRange.End
-			}) {
-				continue
-			}
-			if isNegated {
-				charClass.Ranges = append(charClass.Ranges, metaRange)
-			} else {
-				charClass.NegatedRanges = append(charClass.NegatedRanges, metaRange)
-			}
-		}
+	charSet := BuildCharacterSet(ranges)
+	if isNegated {
+		charSet = NegateCharacterSet(charSet)
 	}
-	return charClass, nil
+	return charSet, nil
 }
 
 type RegexToken struct {
@@ -528,51 +476,53 @@ func parseEscapeSequence(chars []rune) (char rune, isMetaClass bool, consumed in
 	return v, false, len(chars) - len(t), nil
 }
 
-func getMetaClass(char rune) (CharacterClass, error) {
+func getMetaClass(char rune) (CharacterSet, error) {
 	isNegated := unicode.IsUpper(char)
 	switch char {
 	case 'w', 'W':
 		ranges := []CharacterRange{
-			{Start: 'a', End: 'z'},
-			{Start: 'A', End: 'Z'},
 			{Start: '0', End: '9'},
+			{Start: 'A', End: 'Z'},
+			{Start: '_', End: '_'},
+			{Start: 'a', End: 'z'},
 		}
-		singulars := []Singular{
-			{Char: '_'},
-		}
+		regularSet := CharacterSet{Ranges: ranges}
 		if isNegated {
-			return CharacterClass{NegatedRanges: ranges, NegatedSingulars: singulars, IsNegated: isNegated}, nil
+			return NegateCharacterSet(regularSet), nil
 		}
-		return CharacterClass{Ranges: ranges, Singulars: singulars}, nil
+		return regularSet, nil
 	case 's', 'S':
-		singulars := []Singular{
-			{Char: '\n'},
-			{Char: '\r'},
-			{Char: '\t'},
-			{Char: '\f'},
-			{Char: '\v'},
-			{Char: ' '},
+		ranges := []CharacterRange{
+			{Start: '\t', End: '\t'},
+			{Start: '\n', End: '\n'},
+			{Start: '\v', End: '\v'},
+			{Start: '\f', End: '\f'},
+			{Start: '\r', End: '\r'},
+			{Start: ' ', End: ' '},
 		}
+		regularSet := CharacterSet{Ranges: ranges}
 		if isNegated {
-			return CharacterClass{NegatedSingulars: singulars, IsNegated: isNegated}, nil
+			return NegateCharacterSet(regularSet), nil
 		}
-		return CharacterClass{Singulars: singulars}, nil
+		return regularSet, nil
 	case 'd', 'D':
 		ranges := []CharacterRange{
 			{Start: '0', End: '9'},
 		}
+		regularSet := CharacterSet{Ranges: ranges}
 		if isNegated {
-			return CharacterClass{NegatedRanges: ranges, IsNegated: isNegated}, nil
+			return regularSet, nil
 		}
-		return CharacterClass{Ranges: ranges}, nil
+		return regularSet, nil
 	case '.':
-		singulars := []Singular{
-			{Char: '\n'},
-			{Char: '\r'},
+		ranges := []CharacterRange{
+			{Start: '\n', End: '\n'},
+			{Start: '\r', End: '\r'},
 		}
-		return CharacterClass{NegatedSingulars: singulars, IsNegated: true}, nil
+		regularSet := CharacterSet{Ranges: ranges}
+		return NegateCharacterSet(regularSet), nil
 	}
-	return CharacterClass{}, ErrUnknownMetaClass
+	return CharacterSet{}, ErrUnknownMetaClass
 }
 
 func tokenizeCharClass(i int, chars *[]rune) (*RegexToken, int, error) {
