@@ -5,14 +5,15 @@
 # They are defined by prefixing their name with !.
 
 # Fragment definitions.
-!word_char      [a-zA-Z0-9_]
-!digit          [0-9]
+!word_char      \w
+!digit          \d
 
 # Patterns to ignore
-?whitespace     \s+
+?whitespace     [^\S\n\r]+
 
 # Token definitions
 keywords        if|else|for|while
 identifier      [a-zA-Z]{word_char}*
 semicolon       ;
-operator        =|+|>|<
+operator        [=+><]
+newline         \n\r?
