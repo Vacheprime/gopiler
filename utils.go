@@ -93,6 +93,10 @@ func (s *Set[T]) Items() []T {
 	return s.items
 }
 
+func (s *Set[T]) ItemsPtr() *[]T {
+	return &s.items
+}
+
 type BitSet struct {
 	Bits []uint64
 }
@@ -176,6 +180,20 @@ func (bs *BitSet) Overlaps(other BitSet) bool {
 		}
 	}
 	return false
+}
+
+func (bs *BitSet) OverlapsPos(other BitSet) []uint {
+	positions := []uint{}
+	for idx := range bs.Bits {
+		overlap := bs.Bits[idx] & other.Bits[idx]
+		for overlap != 0 {
+			bit := bits.TrailingZeros64(overlap)
+			pos := uint(idx*64 + bit)
+			overlap &= overlap - 1
+			positions = append(positions, pos)
+		}
+	}
+	return positions
 }
 
 func (bs *BitSet) IsZero() bool {
