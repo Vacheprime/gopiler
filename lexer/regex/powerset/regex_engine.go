@@ -15,17 +15,11 @@ func Match(search string, dfa DFA) (match ReMatch, hasMatch bool) {
 		latestMatch.EndIndex = 0
 	}
 	for i, c := range chars {
-		charClasses := dfa.Classifier.Classify(c)
-		if len(charClasses) == 0 {
+		charClass := dfa.Classifier.Classify(c)
+		if charClass == -1 {
 			break
 		}
-		nextState := -1
-		for _, charClass := range charClasses {
-			nextState = dfa.Transitions[state][charClass]
-			if nextState != -1 {
-				break
-			}
-		}
+		nextState := dfa.Transitions[state][charClass]
 		if nextState == -1 {
 			break
 		}

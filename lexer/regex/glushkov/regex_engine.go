@@ -22,8 +22,8 @@ func Match(search string, nfa NFA) (ReMatch, uint, bool) {
 	}
 	var consumedChars uint = 0
 	for i, c := range chars {
-		cIds := nfa.Classifier.Classify(c)
-		if len(cIds) == 0 {
+		cId := nfa.Classifier.Classify(c)
+		if cId == -1 {
 			break // No transitions possible
 		}
 
@@ -33,14 +33,12 @@ func Match(search string, nfa NFA) (ReMatch, uint, bool) {
 		for _, state := range activeStates {
 			// get next states
 			var nextStates gp.BitSet
-			for _, cId := range cIds {
-				s := nfa.Transitions[state][cId]
-				if s.Bits != nil {
-					if nextStates.Bits == nil {
-						nextStates = gp.NewBitSet(totalStates)
-					}
-					nextStates.Or(s)
+			s := nfa.Transitions[state][cId]
+			if s.Bits != nil {
+				if nextStates.Bits == nil {
+					nextStates = gp.NewBitSet(totalStates)
 				}
+				nextStates.Or(s)
 			}
 
 			// Check if a transition exists
