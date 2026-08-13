@@ -109,10 +109,14 @@ func getEquivalenceRanges(allRanges []re.CharacterRange) (equivalenceRanges []re
 		}
 
 		// Handle total overlap at start
-		if charRange.Start == latestEquivalence.Start && charRange.End < latestEquivalence.End {
-			charRange.Start = charRange.End + 1
-			charRange.End = latestEquivalence.End
-			latestEquivalence.End = charRange.Start - 1
+		if charRange.Start == latestEquivalence.Start {
+			if charRange.End < latestEquivalence.End {
+				charRange.Start = charRange.End + 1
+				charRange.End = latestEquivalence.End
+				latestEquivalence.End = charRange.Start - 1
+			} else {
+				charRange.Start = latestEquivalence.End + 1
+			}
 			heap.Push(&rangeQueue, charRange)
 			continue
 		}
