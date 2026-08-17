@@ -8,6 +8,27 @@ import (
 	re "github.com/Vacheprime/gopiler/lexer/regex"
 )
 
+func createSymbol(ranges []re.CharacterRange, id int) re.Symbol {
+	charSet := re.CharacterSet{Ranges: ranges}
+	return re.Symbol{
+		SymbolId: id,
+		Token:    nil,
+		CharSet:  &charSet,
+		Label:    "",
+	}
+}
+
+func createSymbolOccurrences(ranges [][]re.CharacterRange) SymbolOccurrences {
+	occurrences := map[*re.RegexToken]re.Symbol{}
+	for idx, r := range ranges {
+		sym := createSymbol(r, idx)
+		// create tk
+		tk := re.RegexToken{}
+		occurrences[&tk] = sym
+	}
+	return occurrences
+}
+
 func TestGetEquivalenceClasses(t *testing.T) {
 	var testCases = []struct {
 		name  string
@@ -138,35 +159,11 @@ func TestGetEquivalenceClasses(t *testing.T) {
 	}
 }
 
-func createSymbol(ranges []re.CharacterRange, id int) re.Symbol {
-	charSet := re.CharacterSet{Ranges: ranges}
-	return re.Symbol{
-		SymbolId: id,
-		Token:    nil,
-		CharSet:  &charSet,
-		Label:    "",
-	}
-}
-
-func createSymbolOccurrences(symbols []re.Symbol) SymbolOccurrences {
-	occurrences := map[*re.RegexToken]re.Symbol{}
-	for _, sym := range symbols {
-		// create tk
-		tk := re.RegexToken{}
-		occurrences[&tk] = sym
-	}
-	return occurrences
-}
-
 func TestDetermineOwnership(t *testing.T) {
-	type alphabetSym struct {
-		ranges []re.CharacterRange
-		id     int
-	}
 	var testCases = []struct {
 		name         string
 		equiRanges   []re.CharacterRange
-		alphabet     []alphabetSym
+		alphabet     [][]re.CharacterRange
 		ownershipSet [][]uint64
 	}{
 		{
@@ -175,18 +172,12 @@ func TestDetermineOwnership(t *testing.T) {
 				{Start: 'a', End: 'z'},
 				{Start: '0', End: '9'},
 			},
-			alphabet: []alphabetSym{
+			alphabet: [][]re.CharacterRange{
 				{
-					ranges: []re.CharacterRange{
-						{Start: 'a', End: 'z'},
-					},
-					id: 0,
+					{Start: 'a', End: 'z'},
 				},
 				{
-					ranges: []re.CharacterRange{
-						{Start: '0', End: '9'},
-					},
-					id: 1,
+					{Start: '0', End: '9'},
 				},
 			},
 			ownershipSet: [][]uint64{
@@ -200,18 +191,12 @@ func TestDetermineOwnership(t *testing.T) {
 				{Start: 'a', End: 'e'},
 				{Start: 'f', End: 'z'},
 			},
-			alphabet: []alphabetSym{
+			alphabet: [][]re.CharacterRange{
 				{
-					ranges: []re.CharacterRange{
-						{Start: 'a', End: 'z'},
-					},
-					id: 0,
+					{Start: 'a', End: 'z'},
 				},
 				{
-					ranges: []re.CharacterRange{
-						{Start: 'f', End: 'z'},
-					},
-					id: 1,
+					{Start: 'f', End: 'z'},
 				},
 			},
 			ownershipSet: [][]uint64{
@@ -222,11 +207,7 @@ func TestDetermineOwnership(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			symbols := []re.Symbol{}
-			for _, a := range testCase.alphabet {
-				symbols = append(symbols, createSymbol(a.ranges, a.id))
-			}
-			occurrences := createSymbolOccurrences(symbols)
+			occurrences := createSymbolOccurrences(testCase.alphabet)
 			ownershipSets := determineOwnership(testCase.equiRanges, occurrences)
 			nbrSets := len(ownershipSets)
 			nbrRanges := len(testCase.equiRanges)
@@ -242,6 +223,83 @@ func TestDetermineOwnership(t *testing.T) {
 				if !resultBitSet.Equals(expectedBitSet) {
 					t.Errorf("Got %+v, want %+v", resultBitSet, expectedBitSet)
 				}
+			}
+		})
+	}
+}
+
+func TestDetermineEquivalenceClasses(t *testing.T) {
+	var testCases = []struct {
+		name               string
+		alphabet           [][]re.CharacterRange
+		equiRanges         []re.CharacterRange
+		expectedNbrClasses int
+	}{
+		{
+			name: "Single equivalence classes",
+			alphabet: [][]re.CharacterRange{
+				{
+					{Start: 'a', End: 'z'},
+				},
+				{
+					{Start: '0', End: '9'},
+				},
+			},
+			equiRanges: []re.CharacterRange{
+				{Start: '0', End: '9'},
+				{Start: 'a', End: 'z'},
+			},
+			expectedNbrClasses: 2,
+		},
+		{
+			name: "Same ownership for ranges",
+			alphabet: [][]re.CharacterRange{
+				{
+					{Start: 'a', End: 'z'},
+				},
+				{
+					{Start: 'i', End: 'i'},
+				},
+			},
+			equiRanges: []re.CharacterRange{
+				{Start: 'a', End: 'h'},
+				{Start: 'i', End: 'i'},
+				{Start: 'j', End: 'z'},
+			},
+			expectedNbrClasses: 2, // Only
+		},
+		{
+			name: "Same ownership with distinct classes",
+			alphabet: [][]re.CharacterRange{
+				{
+					{Start: 'a', End: 'e'},
+				},
+				{
+					{Start: 'c', End: 'z'},
+				},
+			},
+			equiRanges: []re.CharacterRange{
+				{Start: 'a', End: 'b'},
+				{Start: 'c', End: 'e'},
+				{Start: 'f', End: 'z'},
+			},
+			expectedNbrClasses: 3,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			occurrences := createSymbolOccurrences(testCase.alphabet)
+			ownerships := determineOwnership(testCase.equiRanges, occurrences)
+			equiClasses, _ := determineEquivalenceClasses(ownerships, occurrences)
+			maxClassId := -1
+			for _, equiClass := range equiClasses {
+				if equiClass.ClassId > maxClassId {
+					maxClassId = equiClass.ClassId
+				}
+			}
+			nbrClasses := maxClassId + 1
+			if nbrClasses != testCase.expectedNbrClasses {
+				t.Errorf("Expected %d classes, got %d", testCase.expectedNbrClasses, nbrClasses)
 			}
 		})
 	}
