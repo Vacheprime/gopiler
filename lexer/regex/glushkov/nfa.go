@@ -63,7 +63,7 @@ func (si *SymbolInformation) GetFinalSymbolLabel(sym re.Symbol) string {
 }
 
 func AddSymbolToOccurrences(tk *re.RegexToken, occurrences SymbolOccurrences) re.Symbol {
-	id := len(occurrences) + 1
+	id := len(occurrences)
 	s, _ := re.BuildSymbol(tk, id, "")
 	occurrences[tk] = s
 	return s
