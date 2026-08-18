@@ -47,11 +47,14 @@ func createSymbol(ranges []re.CharacterRange, id int) re.Symbol {
 	}
 }
 
+// createSymbolOccurrences is a helper for creating symbols based on a slice of slice of
+// of character ranges.
+//
+// The token and label of every symbol is empty and the ID corresponds to the index.
 func createSymbolOccurrences(ranges [][]re.CharacterRange) SymbolOccurrences {
 	occurrences := map[*re.RegexToken]re.Symbol{}
 	for idx, r := range ranges {
 		sym := createSymbol(r, idx)
-		// create tk
 		tk := re.RegexToken{}
 		occurrences[&tk] = sym
 	}
@@ -339,7 +342,7 @@ func TestBuildClassifier(t *testing.T) {
 		name             string
 		alphabet         [][]re.CharacterRange
 		expectedClassIds []Comparison
-		totalEquiRanges  int
+		totalEquiClasses int
 	}{
 		{
 			name: "Distinct Symbols.",
@@ -368,10 +371,10 @@ func TestBuildClassifier(t *testing.T) {
 					CompareType: NOT_EQUAL,
 				},
 			},
-			totalEquiRanges: 2,
+			totalEquiClasses: 2,
 		},
 		{
-			name: "Overlapping symbols in the middle",
+			name: "Overlapping symbols in the middle.",
 			alphabet: [][]re.CharacterRange{
 				{
 					{Start: 'a', End: 'z'},
@@ -392,7 +395,7 @@ func TestBuildClassifier(t *testing.T) {
 					CompareType: NOT_EQUAL,
 				},
 			},
-			totalEquiRanges: 2,
+			totalEquiClasses: 2,
 		},
 		{
 			name: "Complex overlap",
@@ -429,7 +432,7 @@ func TestBuildClassifier(t *testing.T) {
 					CompareType: NOT_EQUAL,
 				},
 			},
-			totalEquiRanges: 5,
+			totalEquiClasses: 5,
 		},
 	}
 
@@ -437,16 +440,19 @@ func TestBuildClassifier(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			occurrences := createSymbolOccurrences(testCase.alphabet)
 			classifier, err := BuildClassifier(occurrences)
+			// Of course, there should be no error.
 			if err != nil {
 				t.Errorf("Encountered unexpected error %s", err.Error())
 			}
-			if classifier.Total() != testCase.totalEquiRanges {
-				t.Errorf("Expected %d equivalence ranges, got %d", testCase.totalEquiRanges, classifier.Total())
+			// The total number of equivalence ranges is deterministic and should match
+			if classifier.Total() != testCase.totalEquiClasses {
+				t.Errorf("Expected %d equivalence ranges, got %d", testCase.totalEquiClasses, classifier.Total())
 			}
 			compareStrings := map[ComparisonType]string{
 				EQUAL:     "equal",
 				NOT_EQUAL: "not equal",
 			}
+			// Testing classification by comparing various class IDs from different characters.
 			for _, cmp := range testCase.expectedClassIds {
 				if !cmp.CompareClassIds(classifier) {
 					t.Errorf("Failed comparison: class id of %q must be %s when compared to class id of %q",
@@ -454,6 +460,24 @@ func TestBuildClassifier(t *testing.T) {
 						compareStrings[cmp.CompareType],
 						cmp.RightSide,
 					)
+				}
+			}
+			// Test that all equivalence ranges associated with a symbol, when simplified (merged),
+			// correspond exactly to the initial ranges of the symbol.
+			for _, sym := range occurrences {
+				classIds := classifier.GetClassIdsFromSymbol(sym)
+				allRanges := []re.CharacterRange{}
+				for _, id := range classIds {
+					allRanges = append(allRanges, classifier.GetEquiRangesFromClassId(id)...)
+				}
+				mergedRanges := re.MergeCharacterRanges(allRanges)
+				if len(mergedRanges) != len(sym.CharSet.Ranges) {
+					t.Errorf("Equivalence ranges %+v do not fully represent symbol ranges, %+v", mergedRanges, sym.CharSet.Ranges)
+				}
+				for _, r := range sym.CharSet.Ranges {
+					if !slices.Contains(mergedRanges, r) {
+						t.Errorf("Equivalence range %+v is not contained in equivalence ranges %+v", r, mergedRanges)
+					}
 				}
 			}
 		})
