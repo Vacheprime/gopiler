@@ -8,6 +8,35 @@ import (
 	re "github.com/Vacheprime/gopiler/lexer/regex"
 )
 
+type ComparisonType int
+
+const (
+	EQUAL ComparisonType = iota
+	NOT_EQUAL
+)
+
+type Comparison struct {
+	LeftSide    rune
+	RightSide   rune
+	CompareType ComparisonType
+}
+
+func (cc Comparison) CompareClassIds(classifier SymbolClassifier) bool {
+	leftSideId := classifier.Classify(cc.LeftSide)
+	rightSideId := classifier.Classify(cc.RightSide)
+	switch cc.CompareType {
+	case EQUAL:
+		if leftSideId != rightSideId {
+			return false
+		}
+	case NOT_EQUAL:
+		if leftSideId == rightSideId {
+			return false
+		}
+	}
+	return true
+}
+
 func createSymbol(ranges []re.CharacterRange, id int) re.Symbol {
 	charSet := re.CharacterSet{Ranges: ranges}
 	return re.Symbol{
@@ -300,6 +329,132 @@ func TestDetermineEquivalenceClasses(t *testing.T) {
 			nbrClasses := maxClassId + 1
 			if nbrClasses != testCase.expectedNbrClasses {
 				t.Errorf("Expected %d classes, got %d", testCase.expectedNbrClasses, nbrClasses)
+			}
+		})
+	}
+}
+
+func TestBuildClassifier(t *testing.T) {
+	var testCases = []struct {
+		name             string
+		alphabet         [][]re.CharacterRange
+		expectedClassIds []Comparison
+		totalEquiRanges  int
+	}{
+		{
+			name: "Distinct Symbols.",
+			alphabet: [][]re.CharacterRange{
+				{
+					{Start: 'a', End: 'z'},
+				},
+				{
+					{Start: '0', End: '9'},
+				},
+			},
+			expectedClassIds: []Comparison{
+				{
+					LeftSide:    'a',
+					RightSide:   'z',
+					CompareType: EQUAL,
+				},
+				{
+					LeftSide:    '0',
+					RightSide:   '9',
+					CompareType: EQUAL,
+				},
+				{
+					LeftSide:    'z',
+					RightSide:   '0',
+					CompareType: NOT_EQUAL,
+				},
+			},
+			totalEquiRanges: 2,
+		},
+		{
+			name: "Overlapping symbols in the middle",
+			alphabet: [][]re.CharacterRange{
+				{
+					{Start: 'a', End: 'z'},
+				},
+				{
+					{Start: 'i', End: 'i'},
+				},
+			},
+			expectedClassIds: []Comparison{
+				{
+					LeftSide:    'h',
+					RightSide:   'j',
+					CompareType: EQUAL,
+				},
+				{
+					LeftSide:    'i',
+					RightSide:   'h',
+					CompareType: NOT_EQUAL,
+				},
+			},
+			totalEquiRanges: 2,
+		},
+		{
+			name: "Complex overlap",
+			alphabet: [][]re.CharacterRange{
+				{
+					{Start: 'a', End: 'm'},
+				},
+				{
+					{Start: 'c', End: 'l'},
+				},
+				{
+					{Start: 'f', End: 'n'},
+				},
+			},
+			expectedClassIds: []Comparison{
+				{
+					LeftSide:    'a',
+					RightSide:   'c',
+					CompareType: NOT_EQUAL,
+				},
+				{
+					LeftSide:    'c',
+					RightSide:   'f',
+					CompareType: NOT_EQUAL,
+				},
+				{
+					LeftSide:    'f',
+					RightSide:   'm',
+					CompareType: NOT_EQUAL,
+				},
+				{
+					LeftSide:    'n',
+					RightSide:   'm',
+					CompareType: NOT_EQUAL,
+				},
+			},
+			totalEquiRanges: 5,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			occurrences := createSymbolOccurrences(testCase.alphabet)
+			classifier, err := BuildClassifier(occurrences)
+			if err != nil {
+				t.Errorf("Encountered unexpected error %s", err.Error())
+			}
+			if classifier.Total() != testCase.totalEquiRanges {
+				t.Errorf("Expected %d equivalence ranges, got %d", testCase.totalEquiRanges, classifier.Total())
+			}
+			compareStrings := map[ComparisonType]string{
+				EQUAL:     "equal",
+				NOT_EQUAL: "not equal",
+			}
+			for _, cmp := range testCase.expectedClassIds {
+				if !cmp.CompareClassIds(classifier) {
+					t.Errorf("Failed comparison: class id of %q must be %s when compared to class id of %q",
+						cmp.LeftSide,
+						compareStrings[cmp.CompareType],
+						cmp.RightSide,
+					)
+				}
 			}
 		})
 	}
