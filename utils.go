@@ -106,6 +106,11 @@ func NewBitSet(minBitNbr uint) BitSet {
 	return BitSet{make([]uint64, length)}
 }
 
+func NewBitSetFromInt(integers []uint64) BitSet {
+	bs := BitSet{Bits: integers}
+	return bs
+}
+
 func (bs *BitSet) Set(bitPos uint) {
 	intPos := uint(math.Floor(float64(bitPos) / 64))
 	realBitPos := bitPos % 64

@@ -12,8 +12,36 @@ type CharacterRange struct {
 	End   rune
 }
 
-func (cr *CharacterRange) Matches(r rune) bool {
+func (cr CharacterRange) Matches(r rune) bool {
 	return cr.Start <= r && r <= cr.End
+}
+
+func MergeCharacterRanges(ranges []CharacterRange) (mergedRanges []CharacterRange) {
+	rangesCopy := slices.Clone(ranges)
+	if len(rangesCopy) == 0 || len(rangesCopy) == 1 {
+		return rangesCopy
+	}
+	SortCharacterRanges(&rangesCopy)
+
+	mergedRanges = append(mergedRanges, rangesCopy[0])
+	for _, currentRange := range rangesCopy[1:] {
+		latestSimpRange := &mergedRanges[len(mergedRanges)-1]
+
+		// Handle distinct ranges (no overlap and not adjacent)
+		if currentRange.Start-1 > latestSimpRange.End {
+			mergedRanges = append(mergedRanges, currentRange)
+			continue
+		}
+
+		// Handle total overlap
+		if currentRange.End <= latestSimpRange.End {
+			continue
+		}
+
+		// Handle partial overlap by extending the range
+		latestSimpRange.End = currentRange.End
+	}
+	return mergedRanges
 }
 
 func SortCharacterRanges(ranges *[]CharacterRange) {
@@ -72,33 +100,8 @@ func (cc1 *CharacterSet) Equals(cc2 CharacterSet) (isEqual bool) {
 // since it simplifies and merges ranges to obtain the simplest set
 // possible and it also keeps all ranges sorted by start value.
 func BuildCharacterSet(ranges []CharacterRange) CharacterSet {
-	if len(ranges) == 0 || len(ranges) == 1 {
-		return CharacterSet{Ranges: ranges}
-	}
-
-	// Sort ranges by start value
-	SortCharacterRanges(&ranges)
-
-	// Merge ranges
-	simplifiedRanges := []CharacterRange{ranges[0]}
-	for _, currentRange := range ranges[1:] {
-		latestSimpRange := &simplifiedRanges[len(simplifiedRanges)-1]
-
-		// Handle distinct ranges (no overlap and not adjacent)
-		if currentRange.Start-1 > latestSimpRange.End {
-			simplifiedRanges = append(simplifiedRanges, currentRange)
-			continue
-		}
-
-		// Handle total overlap
-		if currentRange.End <= latestSimpRange.End {
-			continue
-		}
-
-		// Handle partial overlap by extending the range
-		latestSimpRange.End = currentRange.End
-	}
-	return CharacterSet{Ranges: simplifiedRanges}
+	mergedRanges := MergeCharacterRanges(ranges)
+	return CharacterSet{Ranges: mergedRanges}
 }
 
 // NegateCharacterSet computes the negated set of the set given.

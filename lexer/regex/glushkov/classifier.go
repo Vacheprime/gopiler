@@ -29,23 +29,27 @@ func (rq *rangeQueue) Pop() any {
 	return last
 }
 
+// ownershipClass is a helper type used to associate an ownership bitset with a class ID.
 type ownershipClass struct {
 	Bs      gp.BitSet
 	ClassId int
 }
 
+// IdCharacterRange associates a character range with a class ID.
 type IdCharacterRange struct {
 	re.CharacterRange
 	ClassId int
 }
 
+// SymbolClassifier is used to organize the unicode range into distinct classes
+// for creating an NFA / DFA table.
 type SymbolClassifier struct {
 	EquivalenceClasses []IdCharacterRange
 	SymToIds           map[re.Symbol][]int
 }
 
-/* Total returns the total number of character classes. */
-func (sc *SymbolClassifier) Total() int {
+/* Total returns the total number of character classes.*/
+func (sc SymbolClassifier) Total() int {
 	maxId := -1
 	for _, eq := range sc.EquivalenceClasses {
 		if eq.ClassId > maxId {
@@ -55,17 +59,29 @@ func (sc *SymbolClassifier) Total() int {
 	return maxId + 1
 }
 
-func (sc *SymbolClassifier) GetClassIdsFromSymbol(sym re.Symbol) []int {
+// GetClassIdsFromSymbol returns the class IDs that fully match the given symbol.
+func (sc SymbolClassifier) GetClassIdsFromSymbol(sym re.Symbol) []int {
 	return sc.SymToIds[sym]
 }
 
-func (sc *SymbolClassifier) Classify(r rune) (classId int) {
+// Classify takes a rune and returns its class ID.
+func (sc SymbolClassifier) Classify(r rune) (classId int) {
 	for _, class := range sc.EquivalenceClasses {
 		if class.CharacterRange.Matches(r) {
 			return class.ClassId
 		}
 	}
 	return -1
+}
+
+// GetEquiRangesFromClassId returns the ranges of characters that map to the given class ID.
+func (sc SymbolClassifier) GetEquiRangesFromClassId(classId int) (equiRanges []re.CharacterRange) {
+	for _, idRange := range sc.EquivalenceClasses {
+		if idRange.ClassId == classId {
+			equiRanges = append(equiRanges, idRange.CharacterRange)
+		}
+	}
+	return equiRanges
 }
 
 // BuildClassifier creates a classifier based on symbol occurrences.
