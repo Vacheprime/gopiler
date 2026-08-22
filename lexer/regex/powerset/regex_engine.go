@@ -4,10 +4,14 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"slices"
+
+	gp "github.com/Vacheprime/gopiler"
 )
 
 var (
-	ErrUnexpectedIOError = errors.New("an unexpected IO error occurred while reading input")
+	ErrUnexpectedIOError      = errors.New("an unexpected IO error occurred while reading input")
+	ErrUnrecognizableSequence = errors.New("character sequence could not be recognized")
 )
 
 // Matcher matches regular expressions from a source reader.
@@ -57,7 +61,7 @@ type ReMatch struct {
 type ReplayRuneReader struct {
 	r           io.ReadCloser
 	br          *bufio.Reader
-	replayRunes []rune
+	replayRunes gp.Stack[rune]
 }
 
 // NewReplayRuneReader creates a ReplayRuneReader from a ReadCloser.
@@ -65,16 +69,15 @@ func NewReplayRuneReader(r io.ReadCloser) *ReplayRuneReader {
 	return &ReplayRuneReader{
 		r:           r,
 		br:          bufio.NewReader(r),
-		replayRunes: []rune{},
+		replayRunes: gp.NewStack[rune](),
 	}
 }
 
 // NextRune reads the next rune from the reader or returns the earliest rune
 // added as a replay if there are any runes the replay.
 func (rr *ReplayRuneReader) NextRune() (rune, error) {
-	if len(rr.replayRunes) > 0 {
-		r := rr.replayRunes[0]
-		rr.replayRunes = rr.replayRunes[1:]
+	if rr.replayRunes.Len() > 0 {
+		r, _ := rr.replayRunes.Pop()
 		return r, nil
 	}
 	r, _, err := rr.br.ReadRune()
@@ -85,7 +88,8 @@ func (rr *ReplayRuneReader) NextRune() (rune, error) {
 //
 // The first rune in the slice is the first to be reread.
 func (rr *ReplayRuneReader) ReplayRunes(runes []rune) {
-	rr.replayRunes = append(rr.replayRunes, runes...)
+	slices.Reverse(runes)
+	rr.replayRunes.Push(runes...)
 }
 
 // Close closes the underlying ReadCloser.
@@ -129,13 +133,13 @@ func (m *DFAMatcher) Close() error {
 func (m *DFAMatcher) MatchNext() (nextMatch ReMatch, ok bool) {
 	nextMatch = ReMatch{
 		StartIndex: m.runePosition,
-		EndIndex:   -1,
+		EndIndex:   m.runePosition,
 		Match:      "",
 		Labels:     nil,
 	}
 	matchedChars := []rune{}
 	possibleReplays := []rune{}
-	state := 0
+	state := m.dfa.Start()
 	for {
 		r, err := m.replayReader.NextRune()
 		if err == io.EOF {
@@ -147,27 +151,29 @@ func (m *DFAMatcher) MatchNext() (nextMatch ReMatch, ok bool) {
 		}
 		m.advanceRunePosition()
 		possibleReplays = append(possibleReplays, r)
-		charClass := m.dfa.Classifier.Classify(r)
-		if charClass == -1 {
-			break
-		}
-		nextState := m.dfa.Transitions[state][charClass]
+		nextState := m.dfa.TransitionState(state, r)
 		if nextState == -1 {
 			break
 		}
 		state = nextState
 		matchedChars = append(matchedChars, r)
-		if m.dfa.FinalStates.IsSet(uint(state)) {
-			possibleReplays = possibleReplays[:0] // Clear
-			nextMatch.EndIndex = m.runePosition
-			nextMatch.Labels = m.dfa.FinalStateLabels[state]
+		if m.dfa.IsAccepting(state) {
+			ok = true
+			nextMatch.EndIndex = m.CurrentPosition() - 1 // Record position of last match
+			possibleReplays = possibleReplays[:0]        // Clear
+			nextMatch.Labels = m.dfa.AcceptingLabels(state)
 		}
 	}
-	if nextMatch.EndIndex != -1 {
-		nextMatch.Match = string(matchedChars[0 : nextMatch.EndIndex-nextMatch.StartIndex])
+
+	if ok {
+		nextMatch.Match = string(matchedChars[0 : nextMatch.EndIndex-nextMatch.StartIndex+1])
 		m.rewindRunes(possibleReplays)
+	} else if len(possibleReplays) > 0 {
+		nextMatch.EndIndex = nextMatch.StartIndex + len(possibleReplays) - 1
+		nextMatch.Match = string(possibleReplays)
+		m.rewindRunes(possibleReplays[1:])
 	}
-	return nextMatch, nextMatch.EndIndex != -1
+	return nextMatch, ok
 }
 
 // advanceRunePosition moves the rune position forward by 1.
