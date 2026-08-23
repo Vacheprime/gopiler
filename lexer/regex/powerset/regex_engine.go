@@ -88,8 +88,10 @@ func (rr *ReplayRuneReader) NextRune() (rune, error) {
 //
 // The first rune in the slice is the first to be reread.
 func (rr *ReplayRuneReader) ReplayRunes(runes []rune) {
-	slices.Reverse(runes)
-	rr.replayRunes.Push(runes...)
+	c := make([]rune, len(runes))
+	copy(c, runes)
+	slices.Reverse(c)
+	rr.replayRunes.Push(c...)
 }
 
 // Close closes the underlying ReadCloser.
@@ -164,7 +166,6 @@ func (m *DFAMatcher) MatchNext() (nextMatch ReMatch, ok bool) {
 			nextMatch.Labels = m.dfa.AcceptingLabels(state)
 		}
 	}
-
 	if ok {
 		nextMatch.Match = string(matchedChars[0 : nextMatch.EndIndex-nextMatch.StartIndex+1])
 		m.rewindRunes(possibleReplays)
