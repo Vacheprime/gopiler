@@ -279,7 +279,7 @@ func TestMatchNext(t *testing.T) {
 					matches = append(matches, match)
 				} else {
 					err := matcher.Error()
-					if errors.Is(err, io.EOF) {
+					if errors.Is(err, ErrEOF) {
 						break
 					}
 					matches = append(matches, match)
@@ -295,6 +295,183 @@ func TestMatchNext(t *testing.T) {
 				if !areMatchesEqual(expMatch, match) {
 					t.Errorf("Actual match %+v does not equal expected match %+v", match, expMatch)
 				}
+			}
+		})
+	}
+}
+
+func TestInvalidEncoding(t *testing.T) {
+	dfa := mockDFA{
+		transitions: []map[rune]int{
+			{'a': 1},
+			{},
+		},
+		acceptingStates: []int{1},
+		finalLabels: map[int][]string{
+			1: {"a"},
+		},
+	}
+	var testCases = []struct {
+		name            string
+		input           []byte
+		dfa             DFA
+		nbrValidMatches int
+	}{
+		{
+			name:            "Invalid encoding at start.",
+			input:           []byte{0xff, 'a', 'a'},
+			dfa:             dfa,
+			nbrValidMatches: 0,
+		},
+		{
+			name:            "Invalid encoding in middle.",
+			input:           []byte{'a', 0xff, 'a'},
+			dfa:             dfa,
+			nbrValidMatches: 1,
+		},
+		{
+			name:            "Invalid encoding at end.",
+			input:           []byte{'a', 'a', 0xff},
+			dfa:             dfa,
+			nbrValidMatches: 2,
+		},
+		{
+			name:  "Invalid encoding during successful match.",
+			input: []byte{'a', 'b', 'c', 0xff},
+			dfa: mockDFA{
+				transitions: []map[rune]int{
+					{'a': 1},
+					{'b': 2},
+					{'c': 3},
+					{'e': 4},
+					{},
+				},
+				acceptingStates: []int{3, 4},
+			},
+			nbrValidMatches: 1,
+		},
+		{
+			name:            "Invalid encoding during unsuccessful matches.",
+			input:           []byte{'b', 'b', 0xff},
+			dfa:             dfa,
+			nbrValidMatches: 0,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			reader := io.NopCloser(strings.NewReader(string(testCase.input)))
+			matcher := NewDFAMatcher(reader, testCase.dfa)
+			nbrActualMatches := 0
+			for {
+				_, ok := matcher.MatchNext()
+				if ok {
+					nbrActualMatches++
+				} else {
+					err := matcher.Error()
+					if errors.Is(err, ErrEOF) {
+						t.Fatalf("Expecting encoding errors, got EOF.")
+					} else if errors.Is(err, ErrUnexpectedIOError) {
+						t.Fatalf("Expecting encoding errors, got IO error.")
+					} else if errors.Is(err, ErrInvalidUTF8Sequence) {
+						break
+					}
+				}
+			}
+			if nbrActualMatches != testCase.nbrValidMatches {
+				t.Errorf("Expected %d before encoding error, got %d", testCase.nbrValidMatches, nbrActualMatches)
+			}
+		})
+	}
+}
+
+type faultyReader struct {
+	data []byte
+}
+
+func NewFaultyReader(input string) *faultyReader {
+	return &faultyReader{
+		data: []byte(input),
+	}
+}
+
+func (fr *faultyReader) Read(p []byte) (n int, err error) {
+	requested := len(p)
+	read := copy(p, fr.data)
+	fr.data = fr.data[:read]
+	if read < requested {
+		return read, errors.New("some IO error")
+	}
+	return read, nil
+}
+
+func TestUnexpectedError(t *testing.T) {
+	dfa := mockDFA{
+		transitions: []map[rune]int{
+			{'a': 1},
+			{},
+		},
+		acceptingStates: []int{1},
+		finalLabels: map[int][]string{
+			1: {"a"},
+		},
+	}
+	var testCases = []struct {
+		name            string
+		input           string
+		dfa             DFA
+		nbrValidMatches int
+	}{
+		{
+			name:            "IO error at start.",
+			input:           "",
+			dfa:             dfa,
+			nbrValidMatches: 0,
+		},
+		{
+			name:            "IO error after match.",
+			input:           "aaa",
+			dfa:             dfa,
+			nbrValidMatches: 3,
+		},
+		{
+			name:  "IO error after partial match.",
+			input: "abc",
+			dfa: mockDFA{
+				transitions: []map[rune]int{
+					{'a': 1},
+					{'b': 2},
+					{'c': 3},
+					{'d': 4},
+					{},
+				},
+				acceptingStates: []int{2, 4},
+				finalLabels: map[int][]string{
+					2: {"partial"},
+					4: {"full"},
+				},
+			},
+			nbrValidMatches: 1,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			reader := io.NopCloser(NewFaultyReader(testCase.input))
+			matcher := NewDFAMatcher(reader, testCase.dfa)
+			nbrMatches := 0
+			for {
+				_, ok := matcher.MatchNext()
+				if ok {
+					nbrMatches++
+				} else {
+					err := matcher.Error()
+					if !errors.Is(err, ErrUnexpectedIOError) {
+						t.Fatalf("Expected IO error, got %s", err.Error())
+					}
+					break
+				}
+			}
+			if nbrMatches != testCase.nbrValidMatches {
+				t.Fatalf("Expected %d matches, got %d", testCase.nbrValidMatches, nbrMatches)
 			}
 		})
 	}

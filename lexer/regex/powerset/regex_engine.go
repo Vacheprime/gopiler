@@ -11,7 +11,9 @@ import (
 
 var (
 	ErrUnexpectedIOError      = errors.New("an unexpected IO error occurred while reading input")
+	ErrInvalidUTF8Sequence    = errors.New("an invalid UTF-8 byte sequence was encountered")
 	ErrUnrecognizableSequence = errors.New("character sequence could not be recognized")
+	ErrEOF                    = errors.New("EOF reached for input")
 )
 
 // Matcher matches regular expressions from a source reader.
@@ -80,7 +82,14 @@ func (rr *ReplayRuneReader) NextRune() (rune, error) {
 		r, _ := rr.replayRunes.Pop()
 		return r, nil
 	}
-	r, _, err := rr.br.ReadRune()
+	r, size, err := rr.br.ReadRune()
+	if size == 1 && r == '\uFFFD' {
+		return r, ErrInvalidUTF8Sequence
+	} else if errors.Is(err, io.EOF) {
+		return r, ErrEOF
+	} else if err != nil {
+		return r, ErrUnexpectedIOError
+	}
 	return r, err
 }
 
@@ -144,15 +153,12 @@ func (m *DFAMatcher) MatchNext() (nextMatch ReMatch, ok bool) {
 	state := m.dfa.Start()
 	for {
 		r, err := m.replayReader.NextRune()
-		if err == io.EOF {
-			m.latestError = io.EOF
-			break
-		} else if err != nil {
-			m.latestError = ErrUnexpectedIOError
+		possibleReplays = append(possibleReplays, r)
+		if err != nil {
+			m.latestError = err
 			break
 		}
 		m.advanceRunePosition()
-		possibleReplays = append(possibleReplays, r)
 		nextState := m.dfa.TransitionState(state, r)
 		if nextState == -1 {
 			break
