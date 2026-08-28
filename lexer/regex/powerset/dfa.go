@@ -7,13 +7,56 @@ import (
 	gl "github.com/Vacheprime/gopiler/lexer/regex/glushkov"
 )
 
-type DFA struct {
+// DFA represents a deterministic finite automaton where every accepting state
+// is associated with a label that describes the regex that produced the match.
+type DFA interface {
+	// Start returns the start state.
+	Start() (startState int)
+
+	// TransitionState attempts to move to a next state given the current
+	// state and an input character.
+	//
+	// Returns -1 if the current state does not accept the character.
+	TransitionState(state int, r rune) (nextState int)
+	IsAccepting(state int) bool
+
+	// AcceptingLabels returns the labels of the regexes that produced the result.
+	//
+	// The ordering of the labels is not guaranteed.
+	AcceptingLabels(finalState int) []string
+}
+
+// TableDFA is a table-based implementation of the DFA interface.
+type TableDFA struct {
 	Classifier       gl.SymbolClassifier
-	Transitions      [][]int // A transition only has one next state
+	Transitions      [][]int
 	FinalStates      gp.BitSet
 	FinalStateLabels map[int][]string
-	// Imagine a map that associates a final state bit position to a label given during construction
-	// Upon match, the label is retrieved and returned along with the match.
+}
+
+func (dfa TableDFA) Start() int {
+	return 0
+}
+
+func (dfa TableDFA) TransitionState(state int, r rune) (nextState int) {
+	classId := dfa.Classifier.Classify(r)
+	if classId == -1 {
+		return -1
+	}
+	nextState = dfa.Transitions[state][classId]
+	return nextState
+}
+
+func (dfa TableDFA) IsAccepting(state int) bool {
+	return dfa.FinalStates.IsSet(uint(state))
+}
+
+func (dfa TableDFA) AcceptingLabels(finalState int) []string {
+	labels, ok := dfa.FinalStateLabels[finalState]
+	if !ok {
+		return []string{}
+	}
+	return labels
 }
 
 type DFAState struct {
@@ -21,10 +64,10 @@ type DFAState struct {
 	Pos       int
 }
 
-func BuildDFA(nfa gl.NFA) DFA {
+func BuildTableDFA(nfa gl.NFA) TableDFA {
 	TOTAL_STATES := uint(len(nfa.Transitions))
 	TOTAL_CHAR_CLASSES := nfa.Classifier.Total()
-	dfa := DFA{Classifier: nfa.Classifier}
+	dfa := TableDFA{Classifier: nfa.Classifier}
 	dfaTransitions := make([][]int, 0)
 	dfaTransitions = append(dfaTransitions, make([]int, TOTAL_CHAR_CLASSES)) // Initial State
 
