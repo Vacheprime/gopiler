@@ -2,43 +2,56 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"strings"
 
 	// "github.com/Vacheprime/gopiler/lexer"
+	"github.com/Vacheprime/gopiler/lexer"
 	"github.com/Vacheprime/gopiler/lexer/regex"
 	"github.com/Vacheprime/gopiler/lexer/regex/glushkov"
 	"github.com/Vacheprime/gopiler/lexer/regex/powerset"
 )
 
 func main() {
-	expr, err := regex.RegexToParseTree(`[a-zA-Z]\w*`)
-	expr2, err := regex.RegexToParseTree(`if|else|for|while`)
+	defs, err := lexer.ParseDefinitions("../token_regexp.txt")
 	if err != nil {
 		panic(err)
 	}
-	lblTree1 := glushkov.LabelledRegexTree{Root: expr, Label: "FIRST"}
-	lblTree2 := glushkov.LabelledRegexTree{Root: expr2, Label: "SECOND"}
-	combinedInfo := glushkov.BuildSymbolInformation([]glushkov.LabelledRegexTree{lblTree1, lblTree2})
-	// symInfo := glushkov.BuildSymbolInformation(expr)
-	// symInfo2 := glushkov.BuildSymbolInformation(expr2)
-
-	nfa, err := glushkov.BuildNFA(combinedInfo)
+	lblTrees := []glushkov.LabelledRegexTree{}
+	for _, def := range defs {
+		expr, err := regex.RegexToParseTree(def.Regex)
+		if err != nil {
+			panic(err)
+		}
+		lblTree := glushkov.LabelledRegexTree{
+			Root:  expr,
+			Label: def.Identifier,
+		}
+		lblTrees = append(lblTrees, lblTree)
+	}
+	symInfo := glushkov.BuildSymbolInformation(lblTrees)
+	nfa, err := glushkov.BuildNFA(symInfo)
 	if err != nil {
 		panic(err)
 	}
-	dfa := powerset.BuildDFA(nfa)
-	search := "my_var8"
-	match, ok := powerset.Match(search, dfa)
-	if ok {
-		fmt.Println(match.Match)
-		fmt.Println(match.Labels)
-		fmt.Println(len(match.Match))
-	} else {
-		fmt.Println("No match!")
-	}
+	dfa := powerset.BuildTableDFA(nfa)
 
-	// defs, err := lexer.ParseDefinitions("../token_regexp.txt")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Println(defs)
+	input := `
+		int a = 6
+	`
+	reader := io.NopCloser(strings.NewReader(input))
+
+	matcher := powerset.NewDFAMatcher(reader, dfa)
+	fmt.Println(defs)
+	lx := lexer.NewLexer(matcher, defs)
+	for {
+		tk, err := lx.NextToken()
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("TOKEN: %+v\n", tk)
+		if tk.TkType == lexer.EOF {
+			break
+		}
+	}
 }

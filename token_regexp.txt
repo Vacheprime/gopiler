@@ -9,11 +9,14 @@
 !digit          \d
 
 # Patterns to ignore
-?whitespace     [^\S\n\r]+
+?WHITESPACE     [^\S\n\r]+
 
 # Token definitions
 keywords        if|else|for|while
-identifier      [a-zA-Z]{word_char}*
-semicolon       ;
-operator        [=+><]
-newline         \n\r?
+INTEGER         \d+
+FLOAT           \d+[.]\d+
+ASSIGNMENT      =
+DTYPE_INT       int
+DTYPE_FLOAT     float
+IDENTIFIER      [a-zA-Z]{word_char}*
+NEWLINE         \n\r?

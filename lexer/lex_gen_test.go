@@ -6,13 +6,13 @@ import (
 )
 
 func TestRegexSubstitution(t *testing.T) {
-	definitions := [][]definition{
-		{definition{"digit", "[0-9]", FRAG, 0}},
+	definitions := [][]Definition{
+		{Definition{"digit", "[0-9]", FRAG, 0}},
 	}
 	var tests = []struct {
 		name        string
 		input       string
-		definitions []definition
+		definitions []Definition
 		want        string
 	}{
 		{"{digit}* should be [0-9]*", "{digit}*", definitions[0], "[0-9]*"},
@@ -34,18 +34,18 @@ func TestRegexSubstitution(t *testing.T) {
 }
 
 func TestRegexSubstitutionInvalid(t *testing.T) {
-	definitions := [][]definition{
-		{definition{"digit", "[0-9]", FRAG, 0}},
+	definitions := [][]Definition{
+		{Definition{"digit", "[0-9]", FRAG, 0}},
 	}
 	var tests = []struct {
 		name        string
 		input       string
-		definitions []definition
+		definitions []Definition
 		wantMsg     string
 	}{
 		{"{digit* should be Unclosed", "{digit*", definitions[0], ErrUnclosedRePlaceholder},
 		{`{di git}*|{digit} should be Invalid Name`, `{di git}*|{digit}`, definitions[0], ErrInvalidRePlaceholderName},
-		{"{digit}a should be Class not defined", "{digit}a", []definition{}, ErrClassDefNotDefined},
+		{"{digit}a should be Class not defined", "{digit}a", []Definition{}, ErrClassDefNotDefined},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

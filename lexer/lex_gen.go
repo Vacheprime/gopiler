@@ -2,11 +2,15 @@ package lexer
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strings"
 	"unicode"
+
+	pw "github.com/Vacheprime/gopiler/lexer/regex/powerset"
 )
 
 const (
@@ -16,7 +20,137 @@ const (
 	ErrInvalidRePlaceholderName string = "Invalid identifier for regex placeholder."
 	ErrClassDefNotDefined       string = "Class definition not defined."
 	ErrUnclosedRePlaceholder    string = "Regex placeholder is never closed."
+
+	ErrTokenDefinitionUnrecognised string = "Definition name is not a valid token."
 )
+
+type TokenType int
+
+const (
+	IDENTIFIER TokenType = iota
+	INTEGER
+	FLOAT
+	ASSIGNMENT
+	NEWLINE
+	DTYPE_INT
+	DTYPE_FLOAT
+	WHITESPACE
+
+	ERROR
+	EOF
+)
+
+var stringToTokenType map[string]TokenType = map[string]TokenType{
+	"IDENTIFIER":  IDENTIFIER,
+	"INTEGER":     INTEGER,
+	"FLOAT":       FLOAT,
+	"ASSIGNMENT":  ASSIGNMENT,
+	"NEWLINE":     NEWLINE,
+	"DTYPE_INT":   DTYPE_INT,
+	"DTYPE_FLOAT": DTYPE_FLOAT,
+	"WHITESPACE":  WHITESPACE,
+}
+
+type Token struct {
+	Repr   string
+	TkType TokenType
+	Pos    Position
+}
+
+type Position struct {
+	Line int
+	Col  int
+}
+
+type Lexer struct {
+	matcher     pw.SequentialMatcher
+	definitions []Definition
+	nextMatch   *pw.ReMatch
+	lastNLIdx   int
+	nlCount     int
+}
+
+func NewLexer(sm pw.SequentialMatcher, defs []Definition) *Lexer {
+	return &Lexer{
+		matcher:     sm,
+		definitions: defs,
+		nextMatch:   nil,
+		lastNLIdx:   0,
+		nlCount:     0,
+	}
+}
+
+func (l *Lexer) NextToken() (token Token, err error) {
+	var match pw.ReMatch
+	if l.nextMatch != nil {
+		match = *l.nextMatch
+		l.nextMatch = nil
+		err = nil
+	} else {
+		match, err = l.matcher.MatchNext()
+	}
+
+	if errors.Is(err, io.EOF) {
+		token.TkType = EOF
+		return token, nil
+	}
+
+	// Aggregate no matches
+	if !match.IsMatching {
+		for {
+			nextMatch, err := l.matcher.MatchNext()
+			if err != nil {
+				return token, err
+			}
+			if nextMatch.IsMatching {
+				l.nextMatch = &nextMatch
+				break
+			}
+			if nextMatch.StartIndex <= match.EndIndex {
+				continue
+			}
+			l.nextMatch = &nextMatch
+			break
+		}
+		token.Repr = match.Match
+		token.TkType = ERROR
+		token.Pos = Position{
+			Line: l.nlCount,
+			Col:  match.StartIndex,
+		}
+		return token, nil
+	}
+	def, err := l.getSourceDefinition(match.Labels)
+	if err != nil {
+		return token, err
+	}
+	tkType, ok := stringToTokenType[def.Identifier]
+	if !ok {
+		return token, errors.New(ErrTokenDefinitionUnrecognised)
+	}
+	token.TkType = tkType
+	token.Repr = match.Match
+	pos := Position{
+		Line: l.nlCount,
+		Col:  match.StartIndex - l.lastNLIdx,
+	}
+	token.Pos = pos
+	if token.TkType == NEWLINE {
+		l.nlCount++
+		l.lastNLIdx = match.EndIndex
+	}
+
+	return token, nil
+}
+
+func (l *Lexer) getSourceDefinition(matchLabels []string) (def Definition, err error) {
+	for _, def := range l.definitions {
+		if slices.Contains(matchLabels, def.Identifier) {
+			return def, nil
+		}
+	}
+	return Definition{}, errors.New(ErrTokenDefinitionUnrecognised)
+}
 
 /* Parsing related errors. */
 type ParseError struct {
@@ -42,12 +176,12 @@ const (
 	IGNORE
 )
 
-/* Encompasses token definition information. */
-type definition struct {
-	identifier string
-	regex      string
-	defType    definitionType
-	insType    instructionType
+/* Encompasses token Definition information. */
+type Definition struct {
+	Identifier string
+	Regex      string
+	DefType    definitionType
+	InsType    instructionType
 }
 
 /*
@@ -56,14 +190,14 @@ type definition struct {
 
 TODO: Instead of file path, request a Reader or ReadCloser.
 */
-func ParseDefinitions(patternFilePath string) ([]definition, error) {
+func ParseDefinitions(patternFilePath string) ([]Definition, error) {
 	file, err := os.Open(patternFilePath)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 	scanner := bufio.NewScanner(file)
-	classDefs := []definition{}
+	classDefs := []Definition{}
 	lineCount := 0
 	for scanner.Scan() {
 		lineCount++
@@ -77,8 +211,8 @@ func ParseDefinitions(patternFilePath string) ([]definition, error) {
 			err.Line = lineCount
 			return nil, err
 		}
-		found := slices.ContainsFunc(classDefs, func(d definition) bool {
-			if d.identifier == def.identifier {
+		found := slices.ContainsFunc(classDefs, func(d Definition) bool {
+			if d.Identifier == def.Identifier {
 				return true
 			}
 			return false
@@ -86,23 +220,23 @@ func ParseDefinitions(patternFilePath string) ([]definition, error) {
 		if found {
 			return nil, &ParseError{ErrClassRedefined, lineCount}
 		}
-		substituted, err := substituteRegexPlaceholders(def.regex, classDefs)
+		substituted, err := substituteRegexPlaceholders(def.Regex, classDefs)
 		if err != nil {
 			err.Line = lineCount
 			return nil, err
 		}
-		def.regex = substituted
+		def.Regex = substituted
 		classDefs = append(classDefs, def)
-		def.regex = substituted
+		def.Regex = substituted
 	}
 	return filterDefinitionsByType(classDefs, CLASS), nil
 }
 
 /* Filters definitions by the definition type. */
-func filterDefinitionsByType(defs []definition, defType definitionType) []definition {
-	filtered := make([]definition, 0, len(defs))
+func filterDefinitionsByType(defs []Definition, defType definitionType) []Definition {
+	filtered := make([]Definition, 0, len(defs))
 	for _, d := range defs {
-		if d.defType == defType {
+		if d.DefType == defType {
 			filtered = append(filtered, d)
 		}
 	}
@@ -110,10 +244,10 @@ func filterDefinitionsByType(defs []definition, defType definitionType) []defini
 }
 
 /* Parses a definition from a line of input. */
-func parseDefinition(line string) (definition, *ParseError) {
+func parseDefinition(line string) (Definition, *ParseError) {
 	components := strings.Fields(line)
 	if len(components) != 2 {
-		return definition{}, &ParseError{Message: ErrInvalidClassDefinition}
+		return Definition{}, &ParseError{Message: ErrInvalidClassDefinition}
 	}
 	className := components[0]
 	regexDef := components[1]
@@ -127,13 +261,13 @@ func parseDefinition(line string) (definition, *ParseError) {
 		insType = IGNORE
 		className = className[1:]
 	}
-	return definition{className, regexDef, defType, insType}, nil
+	return Definition{className, regexDef, defType, insType}, nil
 }
 
 /*
 Given a regex and a slice of regex definitions, this function replaces the placeholders of a regex with their appropriate definitions.
 */
-func substituteRegexPlaceholders(regex string, classDefs []definition) (string, *ParseError) {
+func substituteRegexPlaceholders(regex string, classDefs []Definition) (string, *ParseError) {
 	chars := []rune(regex)
 	var substitutedRegexBuilder strings.Builder
 	for i := 0; i < len(chars); i++ {
@@ -154,13 +288,13 @@ func substituteRegexPlaceholders(regex string, classDefs []definition) (string, 
 			if err != nil {
 				return "", err
 			}
-			foundIdx := slices.IndexFunc(classDefs, func(d definition) bool {
-				return d.identifier == placeholderId
+			foundIdx := slices.IndexFunc(classDefs, func(d Definition) bool {
+				return d.Identifier == placeholderId
 			})
 			if foundIdx == -1 {
 				return "", &ParseError{Message: ErrClassDefNotDefined}
 			}
-			substituteRegex := classDefs[foundIdx].regex
+			substituteRegex := classDefs[foundIdx].Regex
 			substitutedRegexBuilder.WriteString(substituteRegex)
 			i += n
 		} else {
