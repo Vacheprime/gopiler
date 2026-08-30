@@ -2,15 +2,11 @@ package lexer
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"slices"
 	"strings"
 	"unicode"
-
-	pw "github.com/Vacheprime/gopiler/lexer/regex/powerset"
 )
 
 const (
@@ -20,137 +16,7 @@ const (
 	ErrInvalidRePlaceholderName string = "Invalid identifier for regex placeholder."
 	ErrClassDefNotDefined       string = "Class definition not defined."
 	ErrUnclosedRePlaceholder    string = "Regex placeholder is never closed."
-
-	ErrTokenDefinitionUnrecognised string = "Definition name is not a valid token."
 )
-
-type TokenType int
-
-const (
-	IDENTIFIER TokenType = iota
-	INTEGER
-	FLOAT
-	ASSIGNMENT
-	NEWLINE
-	DTYPE_INT
-	DTYPE_FLOAT
-	WHITESPACE
-
-	ERROR
-	EOF
-)
-
-var stringToTokenType map[string]TokenType = map[string]TokenType{
-	"IDENTIFIER":  IDENTIFIER,
-	"INTEGER":     INTEGER,
-	"FLOAT":       FLOAT,
-	"ASSIGNMENT":  ASSIGNMENT,
-	"NEWLINE":     NEWLINE,
-	"DTYPE_INT":   DTYPE_INT,
-	"DTYPE_FLOAT": DTYPE_FLOAT,
-	"WHITESPACE":  WHITESPACE,
-}
-
-type Token struct {
-	Repr   string
-	TkType TokenType
-	Pos    Position
-}
-
-type Position struct {
-	Line int
-	Col  int
-}
-
-type Lexer struct {
-	matcher     pw.SequentialMatcher
-	definitions []Definition
-	nextMatch   *pw.ReMatch
-	lastNLIdx   int
-	nlCount     int
-}
-
-func NewLexer(sm pw.SequentialMatcher, defs []Definition) *Lexer {
-	return &Lexer{
-		matcher:     sm,
-		definitions: defs,
-		nextMatch:   nil,
-		lastNLIdx:   0,
-		nlCount:     0,
-	}
-}
-
-func (l *Lexer) NextToken() (token Token, err error) {
-	var match pw.ReMatch
-	if l.nextMatch != nil {
-		match = *l.nextMatch
-		l.nextMatch = nil
-		err = nil
-	} else {
-		match, err = l.matcher.MatchNext()
-	}
-
-	if errors.Is(err, io.EOF) {
-		token.TkType = EOF
-		return token, nil
-	}
-
-	// Aggregate no matches
-	if !match.IsMatching {
-		for {
-			nextMatch, err := l.matcher.MatchNext()
-			if err != nil {
-				return token, err
-			}
-			if nextMatch.IsMatching {
-				l.nextMatch = &nextMatch
-				break
-			}
-			if nextMatch.StartIndex <= match.EndIndex {
-				continue
-			}
-			l.nextMatch = &nextMatch
-			break
-		}
-		token.Repr = match.Match
-		token.TkType = ERROR
-		token.Pos = Position{
-			Line: l.nlCount,
-			Col:  match.StartIndex,
-		}
-		return token, nil
-	}
-	def, err := l.getSourceDefinition(match.Labels)
-	if err != nil {
-		return token, err
-	}
-	tkType, ok := stringToTokenType[def.Identifier]
-	if !ok {
-		return token, errors.New(ErrTokenDefinitionUnrecognised)
-	}
-	token.TkType = tkType
-	token.Repr = match.Match
-	pos := Position{
-		Line: l.nlCount,
-		Col:  match.StartIndex - l.lastNLIdx,
-	}
-	token.Pos = pos
-	if token.TkType == NEWLINE {
-		l.nlCount++
-		l.lastNLIdx = match.EndIndex
-	}
-
-	return token, nil
-}
-
-func (l *Lexer) getSourceDefinition(matchLabels []string) (def Definition, err error) {
-	for _, def := range l.definitions {
-		if slices.Contains(matchLabels, def.Identifier) {
-			return def, nil
-		}
-	}
-	return Definition{}, errors.New(ErrTokenDefinitionUnrecognised)
-}
 
 /* Parsing related errors. */
 type ParseError struct {
