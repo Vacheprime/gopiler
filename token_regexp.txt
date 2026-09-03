@@ -12,7 +12,6 @@
 ?WHITESPACE     [^\S\n\r]+
 
 # Token definitions
-keywords        if|else|for|while
 INTEGER         \d+
 FLOAT           \d+[.]\d+
 ASSIGNMENT      =
