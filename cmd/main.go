@@ -36,13 +36,9 @@ func main() {
 	}
 	dfa := powerset.BuildTableDFA(nfa)
 
-	input := `
-		int a = 6
-	`
+	input := "int a = 67\nint b = 45\nfloar1%"
 	reader := io.NopCloser(strings.NewReader(input))
-
 	matcher := powerset.NewDFAMatcher(reader, dfa)
-	fmt.Println(defs)
 	lx := lexer.NewLexer(matcher, defs)
 	for {
 		tk, err := lx.NextToken()
