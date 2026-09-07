@@ -149,44 +149,45 @@ func (m *DFAMatcher) MatchNext() (nextMatch ReMatch, err error) {
 		IsMatching: false,
 	}
 	matchedChars := []rune{}
-	possibleReplays := []rune{}
+	consumed := []rune{}
 	state := m.dfa.Start()
+	latestMatchIdx := m.CurrentPosition()
 	for {
 		r, rErr := m.replayReader.NextRune()
 		if rErr != io.EOF && rErr != ErrInvalidUTF8Sequence {
 			m.advanceRunePosition()
 		}
 		if rErr != nil {
-			// Don't set error if reached EOF but there are still
-			// characters that can be matched individually.
-			if rErr == io.EOF && len(possibleReplays) > 0 && (!slices.Equal(matchedChars, possibleReplays) || !nextMatch.IsMatching) {
+			// Don't set error if a match is currently valid.
+			if rErr == io.EOF && nextMatch.IsMatching && nextMatch.EndIndex+1 < len(consumed) {
 				break
 			}
 			err = rErr
 			break
 		}
-		possibleReplays = append(possibleReplays, r)
+		consumed = append(consumed, r)
 		nextState := m.dfa.TransitionState(state, r)
+		matchedChars = append(matchedChars, r)
 		if nextState == -1 {
 			break
 		}
 		state = nextState
-		matchedChars = append(matchedChars, r)
+		latestMatchIdx = m.CurrentPosition() // Record position of last matched char
 		if m.dfa.IsAccepting(state) {
 			nextMatch.IsMatching = true
-			nextMatch.EndIndex = m.CurrentPosition() - 1 // Record position of last match
-			possibleReplays = possibleReplays[:0]        // Clear
+			nextMatch.EndIndex = m.CurrentPosition() - 1 // Record pos of last valid match
 			nextMatch.Labels = m.dfa.AcceptingLabels(state)
 		}
 	}
+	endIdx := 0
 	if nextMatch.IsMatching {
-		nextMatch.Match = string(matchedChars[0 : nextMatch.EndIndex-nextMatch.StartIndex+1])
-		m.rewindRunes(possibleReplays)
-	} else if len(possibleReplays) > 0 {
-		nextMatch.EndIndex = nextMatch.StartIndex + len(possibleReplays) - 1
-		nextMatch.Match = string(possibleReplays)
-		m.rewindRunes(possibleReplays[1:])
+		endIdx = nextMatch.EndIndex - nextMatch.StartIndex + 1
+	} else if len(consumed) > 0 {
+		endIdx = max(latestMatchIdx-nextMatch.EndIndex, 1)
+		nextMatch.EndIndex = nextMatch.StartIndex + endIdx - 1
 	}
+	nextMatch.Match = string(consumed[0:endIdx])
+	m.rewindRunes(consumed[endIdx:])
 	return nextMatch, err
 }
 

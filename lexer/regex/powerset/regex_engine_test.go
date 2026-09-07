@@ -231,8 +231,8 @@ func TestMatchNext(t *testing.T) {
 				{
 					Match: ReMatch{
 						StartIndex: 0,
-						EndIndex:   3,
-						Match:      "abbb",
+						EndIndex:   2,
+						Match:      "abb",
 						Labels:     []string{},
 						IsMatching: false,
 					},
@@ -240,9 +240,9 @@ func TestMatchNext(t *testing.T) {
 				},
 				{
 					Match: ReMatch{
-						StartIndex: 1,
+						StartIndex: 3,
 						EndIndex:   3,
-						Match:      "bbb",
+						Match:      "b",
 						Labels:     []string{},
 						IsMatching: false,
 					},
@@ -250,18 +250,28 @@ func TestMatchNext(t *testing.T) {
 				},
 				{
 					Match: ReMatch{
-						StartIndex: 2,
+						StartIndex: 4,
 						EndIndex:   4,
-						Match:      "bbd",
-						Labels:     []string{"abbd or bbd"},
-						IsMatching: true,
+						Match:      "d",
+						Labels:     []string{},
+						IsMatching: false,
+					},
+					Err: nil,
+				},
+				{
+					Match: ReMatch{
+						StartIndex: 5,
+						EndIndex:   5,
+						Match:      "",
+						Labels:     []string{},
+						IsMatching: false,
 					},
 					Err: io.EOF,
 				},
 			},
 		},
 		{
-			name:  "Incomplete match due to EOF followed by match.",
+			name:  "Incomplete match due to EOF.",
 			input: "abcd",
 			dfa: mockDFA{
 				transitions: []map[rune]int{
@@ -289,16 +299,6 @@ func TestMatchNext(t *testing.T) {
 						Match:      "abcd",
 						Labels:     []string{},
 						IsMatching: false,
-					},
-					Err: nil,
-				},
-				{
-					Match: ReMatch{
-						StartIndex: 1,
-						EndIndex:   3,
-						Match:      "bcd",
-						Labels:     []string{"bcd"},
-						IsMatching: true,
 					},
 					Err: io.EOF,
 				},
@@ -337,8 +337,8 @@ func TestMatchNext(t *testing.T) {
 				{
 					Match: ReMatch{
 						StartIndex: 3,
-						EndIndex:   4,
-						Match:      "cc",
+						EndIndex:   3,
+						Match:      "c",
 						Labels:     []string{},
 						IsMatching: false,
 					},
@@ -453,54 +453,6 @@ func TestMatchNext(t *testing.T) {
 					Match: ReMatch{
 						StartIndex: 6,
 						EndIndex:   6,
-						Match:      "",
-						Labels:     []string{},
-						IsMatching: false,
-					},
-					Err: io.EOF,
-				},
-			},
-		},
-		{
-			name:  "Incomplete match due to EOF.",
-			input: "ab",
-			dfa: mockDFA{
-				transitions: []map[rune]int{
-					{'a': 1},
-					{'b': 2},
-					{'c': 3},
-					{},
-				},
-				acceptingStates: []int{3},
-				finalLabels: map[int][]string{
-					3: {"abc"},
-				},
-			},
-			expectedMatches: []matchResult{
-				{
-					Match: ReMatch{
-						StartIndex: 0,
-						EndIndex:   1,
-						Match:      "ab",
-						Labels:     []string{},
-						IsMatching: false,
-					},
-					Err: nil,
-				},
-				{
-					Match: ReMatch{
-						StartIndex: 1,
-						EndIndex:   1,
-						Match:      "b",
-						Labels:     []string{},
-						IsMatching: false,
-					},
-					Err: nil,
-				},
-				{
-					Match: ReMatch{
-						StartIndex: 2,
-						EndIndex:   2,
 						Match:      "",
 						Labels:     []string{},
 						IsMatching: false,
@@ -1139,36 +1091,6 @@ func TestSubsequentEOF(t *testing.T) {
 						StartIndex: 0,
 						EndIndex:   2,
 						Match:      "abc",
-						Labels:     []string{},
-						IsMatching: false,
-					},
-					Err: nil,
-				},
-				{
-					Match: ReMatch{
-						StartIndex: 1,
-						EndIndex:   1,
-						Match:      "b",
-						Labels:     []string{},
-						IsMatching: false,
-					},
-					Err: nil,
-				},
-				{
-					Match: ReMatch{
-						StartIndex: 2,
-						EndIndex:   2,
-						Match:      "c",
-						Labels:     []string{},
-						IsMatching: false,
-					},
-					Err: nil,
-				},
-				{
-					Match: ReMatch{
-						StartIndex: 3,
-						EndIndex:   3,
-						Match:      "",
 						Labels:     []string{},
 						IsMatching: false,
 					},
