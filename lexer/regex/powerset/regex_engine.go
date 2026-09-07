@@ -17,9 +17,12 @@ var (
 
 // Matcher matches regular expressions from a source reader.
 //
-// Implementations must not skip any characters from the input
-// source. If the next characters do not match anything, an error
-// should be produced.
+// Upon matching, implementations must restart at the character that follows
+// the matched string. Upon failed match, implementations must restart at the character
+// that follows any partially matched portion. For example, if the matcher consumed
+// abcdf, and had abcd partially matched, expecting e for a valid match, but fails at f,
+// then the matcher must restart at f, and not at b. For a valid match, if the matcher
+// consumed abcd and fully matched abc, then the matcher should restart at d.
 type SequentialMatcher interface {
 	// MatchNext finds the next match in the string.
 	//
