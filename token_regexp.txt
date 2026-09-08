@@ -18,4 +18,5 @@ ASSIGNMENT      =
 DTYPE_INT       int
 DTYPE_FLOAT     float
 IDENTIFIER      [a-zA-Z]{word_char}*
-NEWLINE         \n\r?
+SEMICOLON       ;
+?NEWLINE        \n\r?
