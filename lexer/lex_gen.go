@@ -40,6 +40,7 @@ type instructionType int
 const (
 	LEX instructionType = iota
 	IGNORE
+	UNDEFINED
 )
 
 /* Encompasses token Definition information. */
