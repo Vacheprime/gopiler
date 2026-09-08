@@ -5,6 +5,7 @@ import (
 	"io"
 	"slices"
 
+	utils "github.com/Vacheprime/gopiler"
 	pw "github.com/Vacheprime/gopiler/lexer/regex/powerset"
 )
 
@@ -19,6 +20,7 @@ const (
 	DTYPE_INT
 	DTYPE_FLOAT
 	WHITESPACE
+	SEMICOLON
 
 	ERROR
 	EOF
@@ -33,6 +35,7 @@ var stringToTokenType map[string]TokenType = map[string]TokenType{
 	"DTYPE_INT":   DTYPE_INT,
 	"DTYPE_FLOAT": DTYPE_FLOAT,
 	"WHITESPACE":  WHITESPACE,
+	"SEMICOLON":   SEMICOLON,
 }
 
 type Token struct {
@@ -41,91 +44,126 @@ type Token struct {
 	Pos    Position
 }
 
+// Position represents the position of a token.
 type Position struct {
 	Line int
-	Col  int
+	Col  int // Column could be the start character or end character.
 }
 
-// Lexer tokenizes source code.
-type Lexer interface {
+// TokenStream provides primitives for reading tokens from source code.
+type TokenStream interface {
+	// NextToken returns and consumes the next token in the stream or an error from the underlying
+	// matcher.
 	NextToken() (token Token, err error)
+
+	// PeekToken returns without consuming the nth token in the stream starting
+	// from the current position where n = 0 is the next token.
+	//
+	// EOF is returned for every n beyond the available tokens in the stream.
+	PeekToken(n int) (token Token, err error)
 }
 
-type SMLexer struct {
+type Lexer struct {
 	matcher     pw.SequentialMatcher
 	definitions []Definition
-	nextMatch   *pw.ReMatch
-	lastNLIdx   int
-	nlCount     int
+	tokenBuffer utils.Queue[Token]
+
+	// TODO: Group these two fields
+	lastNLIdx int
+	nlCount   int
 }
 
-func NewLexer(sm pw.SequentialMatcher, defs []Definition) *SMLexer {
-	return &SMLexer{
+func NewLexer(sm pw.SequentialMatcher, defs []Definition) *Lexer {
+	return &Lexer{
 		matcher:     sm,
 		definitions: defs,
-		nextMatch:   nil,
 		lastNLIdx:   0,
 		nlCount:     0,
 	}
 }
 
-func (l *SMLexer) NextToken() (token Token, err error) {
-	var match pw.ReMatch
-	if l.nextMatch != nil {
-		match = *l.nextMatch
-		l.nextMatch = nil
-		err = nil
-	} else {
-		match, err = l.matcher.MatchNext()
-	}
+func (l *Lexer) NextToken() (token Token, err error) {
+	for {
+		if !l.tokenBuffer.IsEmpty() {
+			token, _ = l.tokenBuffer.Dequeue()
+			return token, nil
+		}
 
-	if errors.Is(err, io.EOF) && match.Match == "" {
-		token.TkType = EOF
-		return token, nil
-	}
-
-	token.TkType = ERROR
-	if !match.IsMatching {
-		nextMatch, err := l.skipSameNoMatches(match)
-		if errors.Is(err, io.EOF) {
-			if match.Match == "" {
-				token.TkType = EOF
-				return token, nil
-			}
-		} else if err != nil {
+		token, insType, strtOffset, err := l.getTokenFromMatcher()
+		if err != nil {
 			return token, err
 		}
-		l.nextMatch = &nextMatch
-	} else {
-		def := l.mustGetSourceDefinition(match.Labels)
-		if def.InsType == IGNORE {
-			nextMatch, err := l.skipIgnoreTokens()
-			if errors.Is(err, io.EOF) {
-				if match.Match == "" {
-					token.TkType = EOF
-					return token, nil
-				}
-			} else if err != nil {
-				return token, err
-			}
-			l.nextMatch = &nextMatch
-			return l.NextToken()
+
+		if token.TkType == NEWLINE {
+			l.nlCount++
+			l.lastNLIdx = strtOffset + len(token.Repr)
 		}
-		token.TkType = stringToTokenType[def.Identifier]
+
+		if insType == IGNORE {
+			continue
+		}
+		return token, err
 	}
-	token.Repr = match.Match
-	token.Pos = Position{
+}
+
+func (l *Lexer) PeekToken(n int) (token Token, err error) {
+	tk, err := l.tokenBuffer.Peek(n)
+	if err == nil {
+		return tk, nil
+	}
+
+	count := 0
+	for {
+		token, insType, strtOffset, err := l.getTokenFromMatcher()
+		if err != nil {
+			return token, err
+		}
+
+		if token.TkType == NEWLINE {
+			l.nlCount++
+			l.lastNLIdx = strtOffset + len(token.Repr)
+		}
+
+		if insType == IGNORE {
+			continue
+		}
+		l.tokenBuffer.Enqueue(token)
+
+		if count == n {
+			return token, nil
+		}
+		count++
+	}
+}
+
+func (l *Lexer) getTokenFromMatcher() (tk Token, insType instructionType, strtOffset int, err error) {
+	match, err := l.matcher.MatchNext()
+	if errors.Is(err, io.EOF) && isMatchMeaningless(match) {
+		tk.TkType = EOF
+		return tk, UNDEFINED, match.StartIndex, nil
+	} else if err != nil {
+		return tk, UNDEFINED, match.StartIndex, err // Return unexpected errors (Invalid encoding or other)
+	}
+
+	tk.Repr = match.Match
+	tk.Pos = Position{
 		Line: l.nlCount,
 		Col:  match.StartIndex - l.lastNLIdx,
 	}
-	if token.TkType == NEWLINE {
-		l.nlCount++
-		l.lastNLIdx = match.EndIndex
+
+	insType = UNDEFINED
+	if match.IsMatching {
+		definition := l.mustGetSourceDefinition(match.Labels)
+		tk.TkType = stringToTokenType[definition.Identifier]
+		insType = definition.InsType
+	} else {
+		tk.TkType = ERROR
 	}
-	return token, nil
+
+	return tk, insType, match.StartIndex, nil
 }
 
-func (l *SMLexer) mustGetSourceDefinition(matchLabels []string) (def Definition) {
+func (l *Lexer) mustGetSourceDefinition(matchLabels []string) (def Definition) {
 	for _, def := range l.definitions {
 		if slices.Contains(matchLabels, def.Identifier) {
 			return def
@@ -134,40 +172,6 @@ func (l *SMLexer) mustGetSourceDefinition(matchLabels []string) (def Definition)
 	panic("match label does not map to any token definition.")
 }
 
-func (l *SMLexer) skipSameNoMatches(firstMatch pw.ReMatch) (nextMatch pw.ReMatch, err error) {
-	for {
-		nextMatch, err = l.matcher.MatchNext()
-		if errors.Is(err, io.EOF) {
-			if nextMatch.Match == "" {
-				return nextMatch, err
-			}
-		} else if err != nil {
-			return nextMatch, err
-		}
-		if nextMatch.IsMatching || nextMatch.StartIndex > firstMatch.EndIndex {
-			break
-		}
-	}
-	return nextMatch, nil
-}
-
-func (l *SMLexer) skipIgnoreTokens() (nextMatch pw.ReMatch, err error) {
-	for {
-		nextMatch, err = l.matcher.MatchNext()
-		if errors.Is(err, io.EOF) {
-			if nextMatch.Match == "" {
-				return nextMatch, err
-			}
-		} else if err != nil {
-			return nextMatch, err
-		}
-		if !nextMatch.IsMatching {
-			return nextMatch, nil
-		}
-		def := l.mustGetSourceDefinition(nextMatch.Labels)
-		if def.InsType == IGNORE {
-			continue
-		}
-		return nextMatch, nil
-	}
+func isMatchMeaningless(m pw.ReMatch) bool {
+	return m.Match == ""
 }
