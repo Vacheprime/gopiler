@@ -5,7 +5,7 @@ import (
 	"io"
 	"slices"
 
-	utils "github.com/Vacheprime/gopiler"
+	gp "github.com/Vacheprime/gopiler"
 	pw "github.com/Vacheprime/gopiler/lexer/regex/powerset"
 )
 
@@ -59,14 +59,14 @@ type TokenStream interface {
 	// PeekToken returns without consuming the nth token in the stream starting
 	// from the current position where n = 0 is the next token.
 	//
-	// EOF is returned for every n beyond the available tokens in the stream.
+	// EOF is returned for every n beyond the availaberrors.New("cannot peek further then size")le tokens in the stream.
 	PeekToken(n int) (token Token, err error)
 }
 
 type Lexer struct {
 	matcher     pw.SequentialMatcher
 	definitions []Definition
-	tokenBuffer utils.Queue[Token]
+	tokenBuffer gp.Queue[Token]
 
 	// TODO: Group these two fields
 	lastNLIdx int
@@ -110,6 +110,8 @@ func (l *Lexer) PeekToken(n int) (token Token, err error) {
 	tk, err := l.tokenBuffer.Peek(n)
 	if err == nil {
 		return tk, nil
+	} else if errors.Is(err, gp.ErrNegativeIndex) {
+		return tk, err
 	}
 
 	count := 0
