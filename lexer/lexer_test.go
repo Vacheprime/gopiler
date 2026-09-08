@@ -5,6 +5,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/Vacheprime/gopiler"
 	pw "github.com/Vacheprime/gopiler/lexer/regex/powerset"
 )
 
@@ -575,5 +576,246 @@ func TestFailedNextToken(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPeekToken(t *testing.T) {
+	var testCases = []struct {
+		name        string
+		ex          string // Example string for demonstration. Not actually used in test.
+		matcher     pw.SequentialMatcher
+		definitions []Definition
+		peekIndex   int
+		peekedToken Token // Token returned by peek.
+		nextToken   Token // Token returned by one call to NextToken following call to PeekToken.
+	}{
+		{
+			name: "[Peek Next] Peeking the next token.",
+			ex:   "abc",
+			matcher: &mockMatcher{
+				matches: []matchPair{
+					{
+						match: pw.ReMatch{
+							StartIndex: 0,
+							EndIndex:   2,
+							Match:      "abc",
+							Labels:     []string{"IDENTIFIER"},
+							IsMatching: true,
+						},
+						err: io.EOF,
+					},
+				},
+			},
+			definitions: defs,
+			peekIndex:   0,
+			peekedToken: Token{
+				Repr:   "abc",
+				TkType: IDENTIFIER,
+				Pos:    Position{},
+			},
+			nextToken: Token{
+				Repr:   "abc",
+				TkType: IDENTIFIER,
+				Pos:    Position{},
+			},
+		},
+		{
+			name: "[Peek far ahead within bounds] Peek multiple tokens ahead while staying within bounds of available tokens.",
+			ex:   "int a = 5",
+			matcher: &mockMatcher{
+				matches: []matchPair{
+					{
+						match: pw.ReMatch{
+							StartIndex: 0,
+							EndIndex:   2,
+							Match:      "int",
+							Labels:     []string{"DTYPE_INT"},
+							IsMatching: true,
+						},
+						err: nil,
+					},
+					{
+						match: pw.ReMatch{
+							StartIndex: 4,
+							EndIndex:   4,
+							Match:      "a",
+							Labels:     []string{"IDENTIFIER"},
+							IsMatching: true,
+						},
+						err: nil,
+					},
+					{
+						match: pw.ReMatch{
+							StartIndex: 6,
+							EndIndex:   6,
+							Match:      "=",
+							Labels:     []string{"ASSIGNMENT"},
+							IsMatching: true,
+						},
+						err: nil,
+					},
+					{
+						match: pw.ReMatch{
+							StartIndex: 8,
+							EndIndex:   8,
+							Match:      "5",
+							Labels:     []string{"INTEGER"},
+							IsMatching: true,
+						},
+						err: io.EOF,
+					},
+				},
+			},
+			definitions: defs,
+			peekIndex:   2,
+			peekedToken: Token{
+				Repr:   "=",
+				TkType: ASSIGNMENT,
+				Pos:    Position{Line: 0, Col: 6},
+			},
+			nextToken: Token{
+				Repr:   "int",
+				TkType: DTYPE_INT,
+				Pos:    Position{},
+			},
+		},
+		{
+			name: "[Peek far ahead outside of bounds] Peek further then the available tokens in the stream.",
+			ex:   "abc =",
+			matcher: &mockMatcher{
+				matches: []matchPair{
+					{
+						match: pw.ReMatch{
+							StartIndex: 0,
+							EndIndex:   2,
+							Match:      "abc",
+							Labels:     []string{"IDENTIFIER"},
+							IsMatching: true,
+						},
+						err: nil,
+					},
+					{
+						match: pw.ReMatch{
+							StartIndex: 4,
+							EndIndex:   4,
+							Match:      "=",
+							Labels:     []string{"ASSIGNMENT"},
+							IsMatching: true,
+						},
+						err: io.EOF,
+					},
+				},
+			},
+			definitions: defs,
+			peekIndex:   10,
+			peekedToken: Token{TkType: EOF},
+			nextToken: Token{
+				Repr:   "abc",
+				TkType: IDENTIFIER,
+				Pos:    Position{},
+			},
+		},
+		{
+			name: "[Peek ignored token] Peeking at a token that has the ignore instruction.",
+			ex:   "abc   \nint",
+			matcher: &mockMatcher{
+				matches: []matchPair{
+					{
+						match: pw.ReMatch{
+							StartIndex: 0,
+							EndIndex:   2,
+							Match:      "abc",
+							Labels:     []string{"IDENTIFIER"},
+							IsMatching: true,
+						},
+						err: nil,
+					},
+					{
+						match: pw.ReMatch{
+							StartIndex: 3,
+							EndIndex:   5,
+							Match:      "   ",
+							Labels:     []string{"WHITESPACE"},
+							IsMatching: true,
+						},
+						err: nil,
+					},
+					{
+						match: pw.ReMatch{
+							StartIndex: 6,
+							EndIndex:   6,
+							Match:      "\n",
+							Labels:     []string{"NEWLINE"},
+							IsMatching: true,
+						},
+						err: nil,
+					},
+					{
+						match: pw.ReMatch{
+							StartIndex: 7,
+							EndIndex:   9,
+							Match:      "int",
+							Labels:     []string{"DTYPE_INT"},
+							IsMatching: true,
+						},
+						err: io.EOF,
+					},
+				},
+			},
+			definitions: defs,
+			peekIndex:   1,
+			peekedToken: Token{
+				Repr:   "int",
+				TkType: DTYPE_INT,
+				Pos:    Position{Line: 1, Col: 0},
+			},
+			nextToken: Token{
+				Repr:   "abc",
+				TkType: IDENTIFIER,
+				Pos:    Position{},
+			},
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			lexer := NewLexer(testCase.matcher, testCase.definitions)
+			resPeeked, err := lexer.PeekToken(testCase.peekIndex)
+			if err != nil {
+				t.Fatalf("Unexpected error while peeking: %s", err)
+			}
+			resNext, err := lexer.NextToken()
+			if err != nil {
+				t.Fatalf("Unexpected error while consuming next: %s", err)
+			}
+			if resPeeked != testCase.peekedToken {
+				t.Errorf("Peeked token %+v does not match expected peek token %+v", resPeeked, testCase.peekedToken)
+			}
+			if resNext != testCase.nextToken {
+				t.Errorf("Next token %+v does not match expected next token %+v", resNext, testCase.nextToken)
+			}
+		})
+	}
+}
+
+func TestNegativePeekIndex(t *testing.T) {
+	matcher := &mockMatcher{
+		matches: []matchPair{
+			{
+				match: pw.ReMatch{
+					StartIndex: 0,
+					EndIndex:   1,
+					Match:      "xy",
+					Labels:     []string{"IDENTIFIER"},
+					IsMatching: true,
+				},
+				err: io.EOF,
+			},
+		},
+	}
+	lexer := NewLexer(matcher, defs)
+	n := -1
+	_, err := lexer.PeekToken(n)
+	if !errors.Is(err, gopiler.ErrNegativeIndex) {
+		t.Fatalf("Unexpected error %s while expecting %s", err, gopiler.ErrNegativeIndex)
 	}
 }
