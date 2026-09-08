@@ -2,6 +2,7 @@ package gopiler
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/bits"
 	"slices"
@@ -222,6 +223,9 @@ func (bs *BitSet) ToBinaryString() string {
 	return b.String()
 }
 
+var ErrNegativeIndex error = errors.New("negative index value")
+var ErrIndexOutOfBounds error = errors.New("index out of bounds")
+
 // Implementation adapted to Generic form from
 // https://medium.com/@danielabatibabatunde1/mastering-queues-in-golang-be77414abe9e
 type Queue[T any] []T
@@ -252,10 +256,10 @@ func (q *Queue[T]) Dequeue() (T, error) {
 func (q Queue[T]) Peek(n int) (T, error) {
 	var zero T
 	if n < 0 {
-		return zero, errors.New("n cannot be negative")
+		return zero, fmt.Errorf("%w : n cannot be negative", ErrNegativeIndex)
 	}
 	if n >= q.Size() {
-		return zero, errors.New("cannot peek further then size")
+		return zero, fmt.Errorf("%w : n cannot be greater or equal to size", ErrIndexOutOfBounds)
 	}
 	return q[n], nil
 }
