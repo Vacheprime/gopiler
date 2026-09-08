@@ -138,11 +138,14 @@ func (l *Lexer) PeekToken(n int) (token Token, err error) {
 
 func (l *Lexer) getTokenFromMatcher() (tk Token, insType instructionType, strtOffset int, err error) {
 	match, err := l.matcher.MatchNext()
-	if errors.Is(err, io.EOF) && isMatchMeaningless(match) {
-		tk.TkType = EOF
-		return tk, UNDEFINED, match.StartIndex, nil
-	} else if err != nil {
-		return tk, UNDEFINED, match.StartIndex, err // Return unexpected errors (Invalid encoding or other)
+	if err != nil {
+		if !errors.Is(err, io.EOF) {
+			return tk, UNDEFINED, match.StartIndex, err // Return unexpected errors (Invalid encoding or other)
+		}
+		if isMatchMeaningless(match) {
+			tk.TkType = EOF
+			return tk, UNDEFINED, match.StartIndex, nil
+		}
 	}
 
 	tk.Repr = match.Match
