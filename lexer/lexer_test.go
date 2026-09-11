@@ -819,3 +819,74 @@ func TestNegativePeekIndex(t *testing.T) {
 		t.Fatalf("Unexpected error %s while expecting %s", err, gopiler.ErrNegativeIndex)
 	}
 }
+
+func TestFailPeekToken(t *testing.T) {
+	var testCases = []struct {
+		name        string
+		matcher     pw.SequentialMatcher
+		definitions []Definition
+		peekIndex   int
+		expectedErr error
+	}{
+		{
+			name: "[Encoding Error] Encoding error encountered while trying to peek.",
+			matcher: &mockMatcher{
+				matches: []matchPair{
+					{
+						match: pw.ReMatch{
+							StartIndex: 0,
+							EndIndex:   1,
+							Match:      "xy",
+							Labels:     []string{"IDENTIFIER"},
+							IsMatching: true,
+						},
+						err: nil,
+					},
+					{
+						match: pw.ReMatch{},
+						err:   pw.ErrInvalidUTF8Sequence,
+					},
+				},
+			},
+			definitions: defs,
+			peekIndex:   1,
+			expectedErr: pw.ErrInvalidUTF8Sequence,
+		},
+		{
+			name: "[Unexpected Error] Unexpected error while matching.",
+			matcher: &mockMatcher{
+				matches: []matchPair{
+					{
+						match: pw.ReMatch{
+							StartIndex: 0,
+							EndIndex:   1,
+							Match:      "xy",
+							Labels:     []string{"IDENTIFIER"},
+							IsMatching: true,
+						},
+						err: nil,
+					},
+					{
+						match: pw.ReMatch{},
+						err:   pw.ErrUnexpectedReaderError,
+					},
+				},
+			},
+			definitions: defs,
+			peekIndex:   1,
+			expectedErr: pw.ErrUnexpectedReaderError,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			lexer := NewLexer(testCase.matcher, testCase.definitions)
+			_, err := lexer.PeekToken(testCase.peekIndex)
+			if err == nil {
+				t.Fatalf("Got no error while expecting error: %s", testCase.expectedErr)
+			}
+			if !errors.Is(err, testCase.expectedErr) {
+				t.Errorf("Got error %s while expeting %s", err, testCase.expectedErr)
+			}
+		})
+	}
+}
