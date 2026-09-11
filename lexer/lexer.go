@@ -52,14 +52,19 @@ type Position struct {
 
 // TokenStream provides primitives for reading tokens from source code.
 type TokenStream interface {
-	// NextToken returns and consumes the next token in the stream or an error from the underlying
-	// matcher.
+	// NextToken returns and consumes the next token in the stream.
+	//
+	// If an unexpected error is encountered, the error is immediately returned. The behavior
+	// of next calls to PeekToken are not defined.
 	NextToken() (token Token, err error)
 
-	// PeekToken returns without consuming the nth token in the stream starting
+	// PeekToken returns, without consuming, the nth token in the stream starting
 	// from the current position where n = 0 is the next token.
 	//
-	// EOF is returned for every n beyond the availaberrors.New("cannot peek further then size")le tokens in the stream.
+	// If an unexpected error is encountered, the error is immediately returned. The behavior of
+	// next calls to PeekToken are not defined.
+	//
+	// EOF is returned for every n beyond the available tokens.
 	PeekToken(n int) (token Token, err error)
 }
 
