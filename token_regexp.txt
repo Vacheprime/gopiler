@@ -10,13 +10,28 @@
 
 # Patterns to ignore
 ?WHITESPACE     [^\S\n\r]+
+?NEWLINE        \r?\n
 
 # Token definitions
+SEMICOLON       ;
+LEFT_PAREN      [(]
+RIGHT_PAREN     [)]
+LEFT_CURLY      [{]
+RIGHT_CURLY     [}]
 INTEGER         \d+
 FLOAT           \d+[.]\d+
 ASSIGNMENT      =
+SUM             [+]
+SUBTRACTION     -
+MULTIPLICATION  [*]
+DIVISION        /
+EXPO            ^
+EQUAL           ==
+GREATER_THAN    >
+LESS_THAN       <
+GREATER_EQ_THAN >=
+LESS_EQ_THAN    <=
+COMMA           ,
 DTYPE_INT       int
 DTYPE_FLOAT     float
 IDENTIFIER      [a-zA-Z]{word_char}*
-SEMICOLON       ;
-?NEWLINE        \n\r?

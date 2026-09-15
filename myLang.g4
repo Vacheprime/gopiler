@@ -57,17 +57,20 @@ power :
     ;
 
 primary:
-    IDENTIFIER
+    IDENTIFIER primary_func_call_suffix?
     | value_literal
-    | func_call
     | LEFT_PAREN expr RIGHT_PAREN
     ;
 
-arg_list:
-    expr* (COMMA expr)*
+primary_func_call_suffix:
+    LEFT_PAREN arg_list? RIGHT_PAREN
     ;
 
-func_call : IDENTIFIER LEFT_PAREN arg_list RIGHT_PAREN ;
+arg_list:
+    expr (COMMA expr)*
+    ;
+
+func_call : IDENTIFIER LEFT_PAREN arg_list? RIGHT_PAREN ;
 comparison : EQUALS | GREATER_THAN | GREATER_EQ_THAN | LESS_THAN | LESS_EQ_THAN ;
 type_declaration : DTYPE_INT | DTYPE_FLOAT ;
 value_literal : INTEGER | FLOAT ;

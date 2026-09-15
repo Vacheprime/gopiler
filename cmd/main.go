@@ -10,6 +10,7 @@ import (
 	"github.com/Vacheprime/gopiler/lexer/regex"
 	"github.com/Vacheprime/gopiler/lexer/regex/glushkov"
 	"github.com/Vacheprime/gopiler/lexer/regex/powerset"
+	"github.com/Vacheprime/gopiler/parser"
 )
 
 func main() {
@@ -36,18 +37,16 @@ func main() {
 	}
 	dfa := powerset.BuildTableDFA(nfa)
 
-	input := "int a = 67\nint b = 45\nfloar1%"
+	input := "int a = 67"
 	reader := io.NopCloser(strings.NewReader(input))
 	matcher := powerset.NewDFAMatcher(reader, dfa)
 	lx := lexer.NewLexer(matcher, defs)
-	for {
-		tk, err := lx.NextToken()
-		if err != nil {
-			panic(err)
-		}
-		fmt.Printf("TOKEN: %+v\n", tk)
-		if tk.TkType == lexer.EOF {
-			break
-		}
+	parser_1 := parser.NewParser(lx)
+	node, err := parser_1.ParseVarDeclaration()
+	if err != nil {
+		panic(err)
 	}
+	fmt.Printf("%+v\n", node.TypeDecl)
+	fmt.Printf("%+v\n", node.Value)
+	fmt.Printf("%+v\n", node.Identifier)
 }
